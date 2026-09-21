@@ -20,6 +20,7 @@ SOURCES = [
     "doubao_tts_sse_test.cpp",
     "openai_reply_protocol_test.cpp",
     "pcm_audio_test.cpp",
+    "playback_buffer_policy_test.cpp",
     "provider_request_test.cpp",
     "provisioning_command_test.cpp",
     "qh_sync_protocol_test.cpp",

@@ -55,6 +55,37 @@ not proof of a successful real-device conversation. Real hardware display,
 Provider, microphone, playback, reconnect, and QH-sync acceptance are still
 required before an `allowed` end-user Release can exist.
 
+## Development loop versus release
+
+Firmware iteration uses a local-only fast path. It runs selected host tests,
+reuses the persistent Arduino build cache, verifies that the bootloader,
+partition table, OTA data image, app address, and exact hardware profile still
+match the firmware already installed on the board, then writes only the app
+partition. It never erases flash, creates a Candidate, commits, or pushes.
+
+For the currently identified development board:
+
+```bash
+python3 scripts/dev_cycle.py --apply \
+  --build-root .build/esp32_voice_kit \
+  --baseline-manifest .build/releases/<installed-release-id>/release-manifest.json \
+  --hardware-profile hardware-profiles/qh.voice-kit.breadboard.n16r8.v1.json \
+  --confirm-hardware-profile-id qh.voice-kit.breadboard.n16r8.v1 \
+  --port <serial-port> \
+  --esptool <path-to-esptool> \
+  --test-module tests.test_firmware_cpp \
+  --json
+```
+
+Repeat `--test-module` for more targeted modules, or omit it to run the full
+host suite. Complete command output is stored under `.build/dev-logs/`; stdout
+contains only the compact result. If a non-app image or address changes, the
+tool refuses app-only flashing and requires a newly reviewed full baseline.
+
+Only after real-device acceptance should the same verified source be run
+through the full test suite, clean compile, Candidate packaging, repository
+commit/push, and the formal release workflow below.
+
 Run host tests:
 
 ```bash

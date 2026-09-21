@@ -98,6 +98,39 @@ class RepositoryContractsTest(unittest.TestCase):
             "endpoint", schema["properties"]["realtimeVoice"]["properties"]
         )
 
+    def test_realtime_audio_uses_psram_buffer_and_background_writer(self) -> None:
+        sketch_root = ROOT / "firmware" / "esp32_voice_kit"
+        sketch = (sketch_root / "esp32_voice_kit.ino").read_text(
+            encoding="utf-8"
+        )
+        playback_path = sketch_root / "buffered_pcm_playback.h"
+
+        self.assertTrue(playback_path.is_file())
+        playback = playback_path.read_text(encoding="utf-8")
+        self.assertIn("xStreamBufferCreateWithCaps", playback)
+        self.assertIn("vStreamBufferDeleteWithCaps", playback)
+        self.assertIn("MALLOC_CAP_SPIRAM", playback)
+        self.assertIn("xTaskCreatePinnedToCore", playback)
+        self.assertIn("PlaybackEnqueueProgress progress(size);", playback)
+        self.assertIn("while (!progress.complete()", playback)
+        self.assertIn("pcm + progress.sentBytes()", playback)
+        self.assertIn("progress.remainingBytes()", playback)
+        self.assertNotIn("if (sent != size)", playback)
+        self.assertIn("buffered_playback.enqueue", sketch)
+        self.assertNotIn("audio_bus.write(pcm.data(), pcm.size())", sketch)
+        self.assertIn(
+            "voice_turn.state() == VoiceTurnState::kPlaying &&\n"
+            "      buffered_playback.failed()",
+            sketch,
+        )
+
+        delta_case = sketch.split(
+            "case qh_voice::RealtimeEventType::kOutputAudioDelta:", 1
+        )[1].split(
+            "case qh_voice::RealtimeEventType::kOutputAudioDone:", 1
+        )[0]
+        self.assertNotIn("showConversation", delta_case)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "audio_frame_pacer.h"
+#include "buffered_pcm_playback.h"
 #include "button_debouncer.h"
 #include "config_transaction.h"
 #include "device_config_wire.h"
@@ -31,6 +32,7 @@ qh_voice::RealtimeVoiceTransport realtime_transport;
 qh_voice::AudioFramePacer frame_pacer(qh_voice::kRealtimeFrameDurationMs);
 qh_voice::DeviceDisplay device_display;
 I2SClass audio_bus;
+qh_voice::BufferedPcmPlayback buffered_playback(audio_bus);
 
 std::optional<qh_voice::DeviceConfig> active_config;
 std::string command_line;
@@ -45,7 +47,6 @@ uint32_t clock_sync_started_ms = 0;
 uint32_t provider_connect_started_ms = 0;
 uint32_t recording_started_ms = 0;
 uint32_t response_started_ms = 0;
-uint32_t playback_drain_started_ms = 0;
 uint32_t success_display_started_ms = 0;
 
 bool microphone_running = false;
@@ -67,7 +68,6 @@ constexpr uint32_t kProviderConnectTimeoutMs = 20000;
 constexpr uint32_t kProviderResponseTimeoutMs = 45000;
 constexpr uint32_t kMinimumRecordingMs = 300;
 constexpr uint32_t kMaximumRecordingMs = 10000;
-constexpr uint32_t kPlaybackDrainMs = 120;
 constexpr uint32_t kSuccessDisplayMs = 1200;
 constexpr int kMicSckPin = 4;
 constexpr int kMicWsPin = 5;
@@ -122,6 +122,7 @@ std::string formatUtcNow() {
 
 void stopAudioBus() {
   if (!microphone_running && !speaker_running) return;
+  if (speaker_running) buffered_playback.cancel();
   audio_bus.end();
   microphone_running = false;
   speaker_running = false;
@@ -195,7 +196,6 @@ void beginRecording() {
   current_reply.clear();
   response_done_received = false;
   output_audio_done_received = false;
-  playback_drain_started_ms = 0;
   capture_samples = 0;
   streamed_frames = 0;
   if (!startMicrophone()) {
@@ -281,16 +281,35 @@ bool writeOutputAudio(std::string_view encoded) {
   std::vector<uint8_t> pcm;
   if (!qh_voice::decodeBase64(encoded, pcm) || pcm.empty() ||
       pcm.size() % sizeof(int16_t) != 0) {
+    buffered_playback.reportFailure(
+        qh_voice::PlaybackFailureStage::kPcmDecode);
     return false;
   }
-  if (!startSpeaker()) return false;
+  if (!speaker_running) {
+    if (!startSpeaker()) {
+      buffered_playback.reportFailure(
+          qh_voice::PlaybackFailureStage::kSpeakerStart);
+      return false;
+    }
+    if (!buffered_playback.beginTurn()) return false;
+  }
   if (voice_turn.state() == qh_voice::VoiceTurnState::kWaitingResponse) {
     voice_turn.apply(qh_voice::VoiceTurnEvent::kOutputAudioStarted);
   }
   qh_voice::scalePcm16Le(pcm.data(), pcm.size(),
                          active_config->preferences.volume_percent);
   device_display.show(qh_voice::UiState::kPlaying);
-  return audio_bus.write(pcm.data(), pcm.size()) == pcm.size();
+  return buffered_playback.enqueue(pcm.data(), pcm.size());
+}
+
+void emitPlaybackFailure() {
+  Serial.printf(
+      "PLAYBACK failure_stage=%s bytes=%lu queue_peak=%lu underruns=%lu\n",
+      qh_voice::playbackFailureStageName(buffered_playback.failureStage())
+          .data(),
+      static_cast<unsigned long>(buffered_playback.totalEnqueuedBytes()),
+      static_cast<unsigned long>(buffered_playback.maximumQueuedBytes()),
+      static_cast<unsigned long>(buffered_playback.underrunCount()));
 }
 
 void syncCompletedTurn() {
@@ -307,6 +326,9 @@ void syncCompletedTurn() {
 }
 
 void completeTurn() {
+  const std::size_t playback_bytes = buffered_playback.totalEnqueuedBytes();
+  const std::size_t playback_peak = buffered_playback.maximumQueuedBytes();
+  const std::size_t playback_underruns = buffered_playback.underrunCount();
   stopAudioBus();
   if (!voice_turn.apply(qh_voice::VoiceTurnEvent::kResponseDone)) {
     failRuntime("provider_event_order_invalid");
@@ -315,6 +337,11 @@ void completeTurn() {
   device_display.show(qh_voice::UiState::kSuccess);
   success_display_active = true;
   success_display_started_ms = millis();
+  Serial.printf(
+      "PLAYBACK bytes=%lu queue_peak=%lu underruns=%lu\n",
+      static_cast<unsigned long>(playback_bytes),
+      static_cast<unsigned long>(playback_peak),
+      static_cast<unsigned long>(playback_underruns));
   Serial.println("RUNTIME state=idle turn=complete");
   syncCompletedTurn();
 }
@@ -348,6 +375,11 @@ void serviceRealtimeEvents() {
         break;
       case qh_voice::RealtimeEventType::kOutputTextDone:
         if (!event.text.empty()) current_reply = event.text;
+        if (active_config && active_config->assistant.show_reply_text &&
+            !current_reply.empty()) {
+          device_display.showConversation("回答", current_reply,
+                                          ST77XX_GREEN);
+        }
         break;
       case qh_voice::RealtimeEventType::kOutputAudioStarted:
         if (voice_turn.state() == qh_voice::VoiceTurnState::kWaitingResponse) {
@@ -357,18 +389,14 @@ void serviceRealtimeEvents() {
         break;
       case qh_voice::RealtimeEventType::kOutputAudioDelta:
         if (!writeOutputAudio(event.audio_base64)) {
+          emitPlaybackFailure();
           failRuntime("playback_failed");
           return;
-        }
-        if (active_config && active_config->assistant.show_reply_text &&
-            !current_reply.empty()) {
-          device_display.showConversation("回答", current_reply,
-                                          ST77XX_GREEN);
         }
         break;
       case qh_voice::RealtimeEventType::kOutputAudioDone:
         output_audio_done_received = true;
-        playback_drain_started_ms = millis();
+        buffered_playback.finishInput();
         break;
       case qh_voice::RealtimeEventType::kResponseDone:
         response_done_received = true;
@@ -439,6 +467,13 @@ void serviceProvider() {
     return;
   }
 
+  if (voice_turn.state() == VoiceTurnState::kPlaying &&
+      buffered_playback.failed()) {
+    emitPlaybackFailure();
+    failRuntime("playback_failed");
+    return;
+  }
+
   if ((voice_turn.state() == VoiceTurnState::kWaitingResponse ||
        voice_turn.state() == VoiceTurnState::kPlaying) &&
       static_cast<uint32_t>(millis() - response_started_ms) >=
@@ -447,8 +482,7 @@ void serviceProvider() {
     return;
   }
   if (speaker_running && response_done_received && output_audio_done_received &&
-      static_cast<uint32_t>(millis() - playback_drain_started_ms) >=
-          kPlaybackDrainMs) {
+      buffered_playback.drained()) {
     completeTurn();
   }
 }
@@ -623,6 +657,11 @@ void setup() {
   Serial.begin(115200);
   device_display.begin();
   delay(250);
+  if (!buffered_playback.begin()) {
+    device_display.showError("playback_buffer_unavailable");
+    emitError("playback_buffer_unavailable");
+    return;
+  }
   store_ready = config_store.begin();
   if (!store_ready) {
     device_display.showError("config_store_unavailable");
