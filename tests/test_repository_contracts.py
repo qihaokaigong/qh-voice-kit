@@ -33,18 +33,37 @@ class RepositoryContractsTest(unittest.TestCase):
             "PartitionScheme=app3M_fat9M_16MB", profile["arduino"]["fqbn"]
         )
 
-    def test_sketch_profile_pins_core_websocket_and_display_libraries(self) -> None:
+    def test_sketch_profile_pins_core_and_display_libraries(self) -> None:
         profile = (
             ROOT / "firmware" / "esp32_voice_kit" / "sketch.yaml"
         ).read_text(encoding="utf-8")
 
         self.assertIn("platform: esp32:esp32 (3.3.11)", profile)
-        self.assertIn("WebSockets (2.7.2)", profile)
         self.assertIn("Adafruit BusIO (1.17.4)", profile)
         self.assertIn("Adafruit GFX Library (1.12.6)", profile)
         self.assertIn("Adafruit ST7735 and ST7789 Library (1.11.0)", profile)
         self.assertIn("U8g2_for_Adafruit_GFX (1.8.0)", profile)
         self.assertIn("PartitionScheme=app3M_fat9M_16MB", profile)
+
+    def test_vendored_websocket_client_accepts_large_realtime_frames(self) -> None:
+        sketch = ROOT / "firmware" / "esp32_voice_kit"
+        profile = (sketch / "sketch.yaml").read_text(encoding="utf-8")
+        limits = sketch / "qh_websocket_limits.h"
+        vendored_header = sketch / "src" / "qh_websockets" / "WebSockets.h"
+        license_file = sketch / "src" / "qh_websockets" / "LICENSE"
+
+        self.assertTrue(limits.is_file())
+        self.assertTrue(vendored_header.is_file())
+        self.assertTrue(license_file.is_file())
+        self.assertNotIn("WebSockets (2.7.2)", profile)
+        self.assertIn(
+            "#define QH_WEBSOCKETS_MAX_DATA_SIZE (64 * 1024)",
+            limits.read_text(encoding="utf-8"),
+        )
+        self.assertIn(
+            "#define WEBSOCKETS_MAX_DATA_SIZE QH_WEBSOCKETS_MAX_DATA_SIZE",
+            vendored_header.read_text(encoding="utf-8"),
+        )
 
     def test_display_uses_verified_hardware_spi_mode_for_gmt130(self) -> None:
         display = (

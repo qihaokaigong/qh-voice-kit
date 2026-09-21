@@ -26,5 +26,13 @@ The checked protocol constants are:
 - output: `pcm_s16le`, 24 kHz;
 - input frame: 320 samples / 640 bytes / 20 ms.
 
+The sketch vendors the client-side arduinoWebSockets 2.7.2 sources under
+`firmware/esp32_voice_kit/src/qh_websockets/`. The only compatibility change
+raises the ESP32 receive-frame ceiling from 15 KiB to a bounded 64 KiB for the
+N16R8 profile. A real Seeduplex reply reached `response.output_text.delta` and
+then exceeded the upstream limit before the next event could reach the
+application parser. The upstream license and patch note are included beside
+the vendored source.
+
 These references and software tests do not constitute a successful call with
 user credentials or a real-device voice conversation.

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <WebSocketsClient.h>
+#include "src/qh_websockets/WebSocketsClient.h"
 
 #include "websocket_disconnect_diagnostic.h"
 
