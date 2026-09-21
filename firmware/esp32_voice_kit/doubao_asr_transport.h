@@ -42,10 +42,7 @@ class DoubaoAsrTransport {
     const auto request = buildDoubaoAsrTransportRequest(
         config.endpoint, config.api_key, config.resource_id,
         std::move(request_id));
-    extra_headers_.clear();
-    for (const auto& header : request.headers) {
-      extra_headers_ += header.name + ": " + header.value + "\r\n";
-    }
+    extra_headers_ = formatWebSocketExtraHeaders(request.headers);
 
     metadata_ = {std::move(user_id), "pcm", 16000, 16, 1,
                  "bigmodel", "single", true};

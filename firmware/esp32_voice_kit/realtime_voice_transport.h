@@ -43,10 +43,7 @@ class RealtimeVoiceTransport {
     status_ = RealtimeTransportStatus::kConnecting;
 
     const auto request = buildRealtimeTransportRequest(provider.api_key);
-    extra_headers_.clear();
-    for (const auto& header : request.headers) {
-      extra_headers_ += header.name + ": " + header.value + "\r\n";
-    }
+    extra_headers_ = formatWebSocketExtraHeaders(request.headers);
 
     socket_.onEvent([this](WStype_t type, uint8_t* payload,
                            std::size_t length) {

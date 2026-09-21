@@ -69,6 +69,19 @@ void summariesNeverContainCredentialsOrHeaderValues() {
   assert(summary.find("Authorization") == std::string::npos);
 }
 
+void formatsWebSocketHeadersWithoutTerminatingTheHttpHeaderBlock() {
+  const qh_voice::ProviderTransportRequest request{
+      "wss://example.test/socket",
+      {{"X-Api-Key", "api-key"}, {"X-Request-Id", "request-id"}}};
+
+  const std::string headers =
+      qh_voice::formatWebSocketExtraHeaders(request.headers);
+  assert(headers == "X-Api-Key: api-key\r\nX-Request-Id: request-id");
+  assert(!headers.empty());
+  assert(headers.back() != '\n');
+  assert(qh_voice::formatWebSocketExtraHeaders({}).empty());
+}
+
 }  // namespace
 
 int main() {
@@ -76,5 +89,6 @@ int main() {
   buildsOpenAiCompatibleReplyHeaders();
   buildsDoubaoTtsHeaders();
   summariesNeverContainCredentialsOrHeaderValues();
+  formatsWebSocketHeadersWithoutTerminatingTheHttpHeaderBlock();
   return 0;
 }

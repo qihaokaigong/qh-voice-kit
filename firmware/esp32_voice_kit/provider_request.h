@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -16,6 +17,16 @@ struct ProviderTransportRequest {
   std::string endpoint;
   std::vector<HeaderValue> headers;
 };
+
+inline std::string formatWebSocketExtraHeaders(
+    const std::vector<HeaderValue>& headers) {
+  std::string output;
+  for (std::size_t index = 0; index < headers.size(); ++index) {
+    if (index != 0) output += "\r\n";
+    output += headers[index].name + ": " + headers[index].value;
+  }
+  return output;
+}
 
 inline ProviderTransportRequest buildDoubaoAsrTransportRequest(
     std::string endpoint, std::string api_key, std::string resource_id,
