@@ -1,26 +1,30 @@
 # Provider protocol sources
 
-Implementation must be checked against first-party, versioned material. The
-current protocol cores were based on these sources:
+The default runtime protocol is implemented against first-party, versioned
+material:
 
-- Doubao streaming ASR documentation:
-  <https://www.volcengine.com/docs/6561/1354869?lang=zh>
-- Doubao ASR new-console `X-Api-Key` authentication example:
-  <https://www.volcengine.com/docs/6561/1631584?lang=zh>
-- Volcengine official `ai-app-lab` ASR client and binary protocol at commit
-  `88c983d70a098110fc839f8cd05e29fa7715e6ce`:
-  <https://github.com/volcengine/ai-app-lab>
-- Doubao TTS V3 HTTP SSE documentation:
-  <https://www.volcengine.com/docs/6561/1598757?lang=zh>
-- ByteDance official AgentKit TTS sample:
-  <https://github.com/bytedance/agentkit-samples/blob/main/skills/byted-text-to-speech/scripts/text_to_speech.py>
+- Doubao Realtime Voice Model 3.0 (Seeduplex) integration guide and Realtime
+  event protocol:
+  <https://www.volcengine.com/docs/6561/2549732?AuditDocumentID=397063&lang=zh>
+- Current-console API Key management linked by that guide:
+  <https://console.volcengine.com/speech/new/setting/apikeys?projectName=default.>
+- Official Python 3.7 duplex demo linked by that guide:
+  <https://portal.volccdn.com/obj/volcfe/cloud-universal-doc/upload_148ee77d3245e465d244b912d1e83c91.zip>
 - Arduino CLI reproducible sketch profiles:
   <https://docs.arduino.cc/arduino-cli/sketch-project-file/>
-- Arduino WebSockets release 2.7.2:
+- Arduino WebSockets 2.7.2:
   <https://github.com/Links2004/arduinoWebSockets/releases/tag/2.7.2>
 - Espressif esptool documentation:
   <https://docs.espressif.com/projects/esptool/en/latest/esp32s3/esptool/>
 
-These references support protocol implementation and host tests. They do not
-constitute a successful call with user credentials or a real-device voice
-conversation.
+The checked protocol constants are:
+
+- endpoint: `wss://openspeech.bytedance.com/api/v3/duplex/realtime/dialogue`;
+- authentication header: `X-Api-Key`;
+- model: `1.2.6.1`;
+- input: PCM, 16 kHz, signed 16-bit mono;
+- output: `pcm_s16le`, 24 kHz;
+- input frame: 320 samples / 640 bytes / 20 ms.
+
+These references and software tests do not constitute a successful call with
+user credentials or a real-device voice conversation.

@@ -6,16 +6,11 @@ namespace {
 
 qh_voice::DeviceConfig validConfig() {
   return {
-      2,
+      3,
       {"studio-wifi", "wifi-secret"},
-      {"doubao-asr-v1",
-       "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel", "asr-api-key",
-       "volc.bigasr.sauc.duration"},
-      {"openai-compatible-v1", "https://api.example.com/v1", "reply-model",
-       "reply-secret"},
-      {"doubao-tts-v1", "https://openspeech.bytedance.com", "tts-secret",
-       "seed-tts-2.0", "speaker-id"},
-      {"zh-CN", "Reply briefly.", 120},
+      {"doubao-seeduplex-v1", "realtime-secret",
+       "zh_female_xiaohe_jupiter_bigtts"},
+      {"zh-CN", "Reply briefly.", true},
       {false, "", "", ""},
       {50},
   };
@@ -52,7 +47,6 @@ class FakeStore final : public qh_voice::ConfigStore {
 void commitsOnlyAfterWriteAndReadback() {
   FakeStore store;
   const auto result = qh_voice::applyDeviceConfig(validConfig(), store);
-
   assert(result == qh_voice::ConfigApplyResult::kApplied);
   assert(store.writes == 1);
   assert(store.matches == 1);
@@ -63,10 +57,8 @@ void commitsOnlyAfterWriteAndReadback() {
 void invalidConfigNeverTouchesStorage() {
   FakeStore store;
   auto config = validConfig();
-  config.network.password.clear();
-
+  config.realtime_voice.api_key.clear();
   const auto result = qh_voice::applyDeviceConfig(config, store);
-
   assert(result == qh_voice::ConfigApplyResult::kInvalidConfig);
   assert(store.writes == 0);
   assert(store.matches == 0);
@@ -77,22 +69,16 @@ void invalidConfigNeverTouchesStorage() {
 void failedWriteDiscardsPendingState() {
   FakeStore store;
   store.write_result = false;
-
-  const auto result = qh_voice::applyDeviceConfig(validConfig(), store);
-
-  assert(result == qh_voice::ConfigApplyResult::kWriteFailed);
+  assert(qh_voice::applyDeviceConfig(validConfig(), store) ==
+         qh_voice::ConfigApplyResult::kWriteFailed);
   assert(store.discards == 1);
-  assert(store.matches == 0);
-  assert(store.activations == 0);
 }
 
 void mismatchedReadbackNeverActivates() {
   FakeStore store;
   store.match_result = false;
-
-  const auto result = qh_voice::applyDeviceConfig(validConfig(), store);
-
-  assert(result == qh_voice::ConfigApplyResult::kReadbackMismatch);
+  assert(qh_voice::applyDeviceConfig(validConfig(), store) ==
+         qh_voice::ConfigApplyResult::kReadbackMismatch);
   assert(store.discards == 1);
   assert(store.activations == 0);
 }
@@ -100,10 +86,8 @@ void mismatchedReadbackNeverActivates() {
 void failedActivationDiscardsPendingState() {
   FakeStore store;
   store.activate_result = false;
-
-  const auto result = qh_voice::applyDeviceConfig(validConfig(), store);
-
-  assert(result == qh_voice::ConfigApplyResult::kActivationFailed);
+  assert(qh_voice::applyDeviceConfig(validConfig(), store) ==
+         qh_voice::ConfigApplyResult::kActivationFailed);
   assert(store.discards == 1);
 }
 

@@ -4,63 +4,71 @@
 #include <WiFi.h>
 #include <esp_system.h>
 
-#include <algorithm>
-#include <cstring>
 #include <optional>
 #include <string>
 #include <time.h>
 #include <vector>
 
-#include "config_transaction.h"
+#include "audio_frame_pacer.h"
 #include "button_debouncer.h"
+#include "config_transaction.h"
 #include "device_config_wire.h"
-#include "doubao_asr_transport.h"
+#include "device_display.h"
 #include "pcm_audio.h"
 #include "preferences_config_store.h"
-#include "provider_http_transport.h"
 #include "provisioning_command.h"
+#include "qh_sync_transport.h"
+#include "realtime_voice_protocol.h"
+#include "realtime_voice_transport.h"
 #include "voice_turn_state.h"
 
 namespace {
 
 qh_voice::PreferencesConfigStore config_store;
 qh_voice::VoiceTurnMachine voice_turn;
-qh_voice::ButtonDebouncer button(/*pressed_level=*/true,
-                                 /*debounce_ms=*/40);
-qh_voice::DoubaoAsrTransport asr_transport;
+qh_voice::ButtonDebouncer button(/*pressed_level=*/true, /*debounce_ms=*/40);
+qh_voice::RealtimeVoiceTransport realtime_transport;
+qh_voice::AudioFramePacer frame_pacer(qh_voice::kRealtimeFrameDurationMs);
+qh_voice::DeviceDisplay device_display;
 I2SClass audio_bus;
+
 std::optional<qh_voice::DeviceConfig> active_config;
 std::string command_line;
 std::vector<uint8_t> config_payload;
 std::size_t expected_payload_size = 0;
 std::string expected_sha256;
 bool store_ready = false;
+
 uint32_t wifi_attempt_started_ms = 0;
-uint32_t wifi_error_started_ms = 0;
+uint32_t runtime_error_started_ms = 0;
 uint32_t clock_sync_started_ms = 0;
+uint32_t provider_connect_started_ms = 0;
 uint32_t recording_started_ms = 0;
-uint32_t provider_stage_started_ms = 0;
-int32_t* recording_buffer = nullptr;
-std::size_t recording_samples = 0;
-std::size_t asr_upload_offset = 0;
+uint32_t response_started_ms = 0;
+uint32_t playback_drain_started_ms = 0;
+uint32_t success_display_started_ms = 0;
+
 bool microphone_running = false;
-bool asr_finish_sent = false;
+bool speaker_running = false;
+bool response_done_received = false;
+bool output_audio_done_received = false;
+bool success_display_active = false;
+std::size_t capture_samples = 0;
+std::size_t streamed_frames = 0;
 std::string current_turn_id;
 std::string current_turn_started_at;
+std::string current_transcript;
+std::string current_reply;
 
 constexpr uint32_t kWifiConnectTimeoutMs = 15000;
-constexpr uint32_t kWifiRetryDelayMs = 5000;
+constexpr uint32_t kRuntimeRetryDelayMs = 5000;
 constexpr uint32_t kClockSyncTimeoutMs = 20000;
-constexpr uint32_t kProviderStageTimeoutMs = 30000;
+constexpr uint32_t kProviderConnectTimeoutMs = 20000;
+constexpr uint32_t kProviderResponseTimeoutMs = 45000;
 constexpr uint32_t kMinimumRecordingMs = 300;
-constexpr uint32_t kMaximumRecordingMs = 5000;
-constexpr uint32_t kInputSampleRate = 16000;
-constexpr uint32_t kOutputSampleRate = 24000;
-constexpr std::size_t kMaximumRecordingSamples =
-    kInputSampleRate * kMaximumRecordingMs / 1000;
-constexpr std::size_t kCaptureSamplesPerRead = 256;
-constexpr std::size_t kAsrSamplesPerFrame = 3200;
-constexpr std::size_t kMaximumTtsAudioBytes = 512 * 1024;
+constexpr uint32_t kMaximumRecordingMs = 10000;
+constexpr uint32_t kPlaybackDrainMs = 120;
+constexpr uint32_t kSuccessDisplayMs = 1200;
 constexpr int kMicSckPin = 4;
 constexpr int kMicWsPin = 5;
 constexpr int kMicSdPin = 6;
@@ -68,9 +76,11 @@ constexpr int kButtonPin = 8;
 constexpr int kSpeakerBclkPin = 16;
 constexpr int kSpeakerLrcPin = 17;
 constexpr int kSpeakerDinPin = 18;
+constexpr std::size_t kCaptureSamplesPerFrame =
+    qh_voice::kRealtimePcmFrameBytes / sizeof(int16_t);
 
-int32_t capture_buffer[kCaptureSamplesPerRead];
-uint8_t asr_pcm_buffer[kAsrSamplesPerFrame * sizeof(int16_t)];
+int32_t capture_buffer[kCaptureSamplesPerFrame];
+uint8_t pcm_frame[qh_voice::kRealtimePcmFrameBytes];
 
 void emitError(const char* code) {
   Serial.printf(
@@ -84,17 +94,8 @@ void emitStatus() {
   Serial.printf(
       "{\"protocol\":\"qh-voice-provision/1\",\"status\":\"ready\","
       "\"configured\":%s,\"runtimeState\":\"%s\","
-      "\"firmware\":\"qh-voice-kit-dev\"}\n",
+      "\"firmware\":\"qh-voice-kit-realtime-dev\"}\n",
       active ? "true" : "false", voice_turn.stateName().data());
-}
-
-void connectWifi() {
-  if (!active_config) return;
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(active_config->network.ssid.c_str(),
-             active_config->network.password.c_str());
-  wifi_attempt_started_ms = millis();
-  Serial.println("RUNTIME state=connecting_wifi");
 }
 
 std::string makeRequestId() {
@@ -104,13 +105,6 @@ std::string makeRequestId() {
            static_cast<unsigned long>(esp_random()),
            static_cast<unsigned long>(esp_random()),
            static_cast<unsigned long>(esp_random()));
-  return output;
-}
-
-std::string makeProviderUserId() {
-  char output[32];
-  snprintf(output, sizeof(output), "qh-voice-%012llx",
-           static_cast<unsigned long long>(ESP.getEfuseMac()));
   return output;
 }
 
@@ -126,212 +120,326 @@ std::string formatUtcNow() {
   return output;
 }
 
-void stopMicrophone() {
-  if (!microphone_running) return;
+void stopAudioBus() {
+  if (!microphone_running && !speaker_running) return;
   audio_bus.end();
   microphone_running = false;
+  speaker_running = false;
+}
+
+void connectWifi() {
+  if (!active_config) return;
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(active_config->network.ssid.c_str(),
+             active_config->network.password.c_str());
+  wifi_attempt_started_ms = millis();
+  device_display.show(qh_voice::UiState::kConnecting);
+  Serial.println("RUNTIME state=connecting_wifi");
 }
 
 void failRuntime(const char* code) {
-  stopMicrophone();
-  asr_transport.close();
-  if (voice_turn.apply(qh_voice::VoiceTurnEvent::kFailure)) {
-    wifi_error_started_ms = millis();
-  }
+  stopAudioBus();
+  realtime_transport.close();
+  voice_turn.apply(qh_voice::VoiceTurnEvent::kFailure);
+  runtime_error_started_ms = millis();
+  device_display.showError(code);
   Serial.printf("RUNTIME state=error code=%s\n", code);
 }
 
 bool startMicrophone() {
+  stopAudioBus();
   audio_bus.setPins(kMicSckPin, kMicWsPin, -1, kMicSdPin);
   microphone_running = audio_bus.begin(
-      I2S_MODE_STD, kInputSampleRate, I2S_DATA_BIT_WIDTH_32BIT,
-      I2S_SLOT_MODE_MONO, I2S_STD_SLOT_LEFT);
+      I2S_MODE_STD, qh_voice::kRealtimeInputSampleRate,
+      I2S_DATA_BIT_WIDTH_32BIT, I2S_SLOT_MODE_MONO, I2S_STD_SLOT_LEFT);
   return microphone_running;
 }
 
+bool startSpeaker() {
+  if (speaker_running) return true;
+  stopAudioBus();
+  audio_bus.setPins(kSpeakerBclkPin, kSpeakerLrcPin, kSpeakerDinPin);
+  speaker_running = audio_bus.begin(
+      I2S_MODE_STD, qh_voice::kRealtimeOutputSampleRate,
+      I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_MONO);
+  return speaker_running;
+}
+
+void startProviderConnection() {
+  if (!active_config ||
+      voice_turn.state() != qh_voice::VoiceTurnState::kConnectingProvider) {
+    return;
+  }
+  const qh_voice::RealtimeSessionConfig session{
+      makeRequestId(), active_config->assistant.system_prompt,
+      active_config->realtime_voice.voice};
+  if (!realtime_transport.begin(active_config->realtime_voice, session)) {
+    failRuntime("provider_config_invalid");
+    return;
+  }
+  provider_connect_started_ms = millis();
+  device_display.show(qh_voice::UiState::kConnecting);
+  Serial.println("RUNTIME state=connecting_provider");
+}
+
 void beginRecording() {
-  if (recording_buffer == nullptr ||
+  if (!active_config ||
+      realtime_transport.status() !=
+          qh_voice::RealtimeTransportStatus::kReady ||
       !voice_turn.apply(qh_voice::VoiceTurnEvent::kButtonPressed)) {
     return;
   }
-  recording_samples = 0;
-  asr_upload_offset = 0;
-  asr_finish_sent = false;
   current_turn_id = makeRequestId();
   current_turn_started_at = formatUtcNow();
+  current_transcript.clear();
+  current_reply.clear();
+  response_done_received = false;
+  output_audio_done_received = false;
+  playback_drain_started_ms = 0;
+  capture_samples = 0;
+  streamed_frames = 0;
   if (!startMicrophone()) {
     failRuntime("microphone_start_failed");
     return;
   }
+  if (!realtime_transport.beginInput(makeRequestId())) {
+    failRuntime("provider_send_failed");
+    return;
+  }
   recording_started_ms = millis();
-  Serial.println("RUNTIME state=recording");
+  frame_pacer.reset(recording_started_ms);
+  success_display_active = false;
+  device_display.show(qh_voice::UiState::kRecording);
+  Serial.println("RUNTIME state=recording_and_streaming");
 }
 
-void beginTranscription() {
-  stopMicrophone();
-  const uint32_t elapsed_ms =
+void finishRecording() {
+  if (voice_turn.state() !=
+      qh_voice::VoiceTurnState::kRecordingAndStreaming) {
+    return;
+  }
+  stopAudioBus();
+  const uint32_t duration_ms =
       static_cast<uint32_t>(millis() - recording_started_ms);
-  if (elapsed_ms < kMinimumRecordingMs || recording_samples == 0) {
+  if (duration_ms < kMinimumRecordingMs || streamed_frames == 0) {
+    realtime_transport.muteInput(makeRequestId());
     voice_turn.apply(qh_voice::VoiceTurnEvent::kRecordingCancelled);
+    device_display.show(qh_voice::UiState::kIdle);
     Serial.println("RUNTIME state=idle reason=recording_too_short");
     return;
   }
-  if (!voice_turn.apply(qh_voice::VoiceTurnEvent::kButtonReleased) ||
-      !active_config ||
-      !asr_transport.begin(active_config->stt, makeRequestId(),
-                           makeProviderUserId())) {
-    failRuntime("asr_start_failed");
+  if (!realtime_transport.commitInput(makeRequestId(), makeRequestId()) ||
+      !voice_turn.apply(qh_voice::VoiceTurnEvent::kButtonReleased)) {
+    failRuntime("provider_commit_failed");
     return;
   }
-  provider_stage_started_ms = millis();
-  Serial.println("RUNTIME state=transcribing");
-}
-
-bool playPcm(std::vector<uint8_t>& audio, uint8_t volume_percent) {
-  if (audio.empty()) return false;
-  qh_voice::scalePcm16Le(audio.data(), audio.size(), volume_percent);
-  audio_bus.setPins(kSpeakerBclkPin, kSpeakerLrcPin, kSpeakerDinPin);
-  if (!audio_bus.begin(I2S_MODE_STD, kOutputSampleRate,
-                       I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_MONO)) {
-    return false;
-  }
-  const std::size_t written = audio_bus.write(audio.data(), audio.size());
-  audio_bus.end();
-  return written == audio.size();
-}
-
-void completeProviderTurn(const std::string& transcript) {
-  using qh_voice::HttpTransportError;
-  using qh_voice::VoiceTurnEvent;
-
-  if (!active_config || transcript.empty() ||
-      !voice_turn.apply(VoiceTurnEvent::kTranscriptReady)) {
-    failRuntime("empty_transcript");
-    return;
-  }
-  Serial.println("RUNTIME state=generating_reply");
-  const qh_voice::OpenAiReplyRequest request{
-      active_config->reply.model, active_config->assistant.system_prompt,
-      transcript, active_config->assistant.max_reply_chars};
-  const auto reply = qh_voice::requestOpenAiReply(active_config->reply, request);
-  if (reply.error != HttpTransportError::kNone || reply.text.empty()) {
-    failRuntime("reply_failed");
-    return;
-  }
-  const std::string reply_text = qh_voice::truncateUtf8(
-      reply.text, active_config->assistant.max_reply_chars);
-  if (reply_text.empty()) {
-    failRuntime("reply_failed");
-    return;
-  }
-
-  voice_turn.apply(VoiceTurnEvent::kReplyReady);
-  Serial.println("RUNTIME state=synthesizing");
-  const qh_voice::DoubaoTtsRequest tts_request{
-      makeProviderUserId(), reply_text, active_config->tts.speaker, "pcm",
-      kOutputSampleRate, 0, 0};
-  auto speech = qh_voice::requestDoubaoTts(
-      active_config->tts, tts_request, makeRequestId(),
-      kMaximumTtsAudioBytes);
-  if (speech.error != HttpTransportError::kNone || speech.audio.empty()) {
-    failRuntime("tts_failed");
-    return;
-  }
-
-  voice_turn.apply(VoiceTurnEvent::kAudioReady);
-  Serial.println("RUNTIME state=playing");
-  if (!playPcm(speech.audio, active_config->preferences.volume_percent)) {
-    failRuntime("playback_failed");
-    return;
-  }
-  voice_turn.apply(VoiceTurnEvent::kPlaybackFinished);
-  Serial.println("RUNTIME state=idle turn=complete");
-  if (active_config->qh_sync.enabled) {
-    const qh_voice::QhConversationTurn turn{
-        active_config->qh_sync.device_id, current_turn_id,
-        current_turn_started_at, transcript, reply_text};
-    const auto sync =
-        qh_voice::postQhConversationTurn(active_config->qh_sync, turn);
-    Serial.printf("QH_SYNC status=%s http=%d\n",
-                  sync.error == HttpTransportError::kNone ? "complete"
-                                                         : "failed",
-                  sync.http_status);
-  }
+  response_started_ms = millis();
+  device_display.show(qh_voice::UiState::kThinking);
+  Serial.printf("RUNTIME state=waiting_response frames=%lu\n",
+                static_cast<unsigned long>(streamed_frames));
 }
 
 void serviceRecording() {
-  if (voice_turn.state() != qh_voice::VoiceTurnState::kRecording ||
+  if (voice_turn.state() !=
+          qh_voice::VoiceTurnState::kRecordingAndStreaming ||
       !microphone_running) {
     return;
   }
-  const std::size_t remaining =
-      kMaximumRecordingSamples - recording_samples;
-  if (remaining == 0 ||
-      static_cast<uint32_t>(millis() - recording_started_ms) >=
-          kMaximumRecordingMs) {
-    beginTranscription();
+  if (static_cast<uint32_t>(millis() - recording_started_ms) >=
+      kMaximumRecordingMs) {
+    finishRecording();
     return;
   }
-  const std::size_t requested_samples =
-      std::min(remaining, kCaptureSamplesPerRead);
-  const std::size_t bytes = audio_bus.readBytes(
-      reinterpret_cast<char*>(capture_buffer),
-      requested_samples * sizeof(int32_t));
-  if (bytes == 0) {
-    failRuntime("microphone_read_failed");
+
+  if (capture_samples < kCaptureSamplesPerFrame) {
+    const std::size_t remaining = kCaptureSamplesPerFrame - capture_samples;
+    const std::size_t bytes = audio_bus.readBytes(
+        reinterpret_cast<char*>(capture_buffer + capture_samples),
+        remaining * sizeof(int32_t));
+    if (bytes == 0 || bytes % sizeof(int32_t) != 0) {
+      failRuntime("microphone_read_failed");
+      return;
+    }
+    capture_samples += bytes / sizeof(int32_t);
+  }
+  if (capture_samples != kCaptureSamplesPerFrame || !frame_pacer.due(millis())) {
     return;
   }
-  const std::size_t samples = bytes / sizeof(int32_t);
-  memcpy(recording_buffer + recording_samples, capture_buffer,
-         samples * sizeof(int32_t));
-  recording_samples += samples;
+  const std::size_t pcm_bytes = qh_voice::convertI2s32ToPcm16Le(
+      capture_buffer, capture_samples, pcm_frame, sizeof(pcm_frame));
+  if (pcm_bytes != qh_voice::kRealtimePcmFrameBytes ||
+      !realtime_transport.sendPcm16(pcm_frame, pcm_bytes)) {
+    failRuntime("provider_send_failed");
+    return;
+  }
+  capture_samples = 0;
+  ++streamed_frames;
 }
 
-void serviceTranscription() {
-  if (voice_turn.state() != qh_voice::VoiceTurnState::kTranscribing) return;
-  asr_transport.loop();
-  if (static_cast<uint32_t>(millis() - provider_stage_started_ms) >=
-      kProviderStageTimeoutMs) {
-    failRuntime("asr_timeout");
+bool writeOutputAudio(std::string_view encoded) {
+  if (!active_config) return false;
+  std::vector<uint8_t> pcm;
+  if (!qh_voice::decodeBase64(encoded, pcm) || pcm.empty() ||
+      pcm.size() % sizeof(int16_t) != 0) {
+    return false;
+  }
+  if (!startSpeaker()) return false;
+  if (voice_turn.state() == qh_voice::VoiceTurnState::kWaitingResponse) {
+    voice_turn.apply(qh_voice::VoiceTurnEvent::kOutputAudioStarted);
+  }
+  qh_voice::scalePcm16Le(pcm.data(), pcm.size(),
+                         active_config->preferences.volume_percent);
+  device_display.show(qh_voice::UiState::kPlaying);
+  return audio_bus.write(pcm.data(), pcm.size()) == pcm.size();
+}
+
+void syncCompletedTurn() {
+  if (!active_config || !active_config->qh_sync.enabled) return;
+  const qh_voice::QhConversationTurn turn{
+      active_config->qh_sync.device_id, current_turn_id,
+      current_turn_started_at, current_transcript, current_reply};
+  const auto result =
+      qh_voice::postQhConversationTurn(active_config->qh_sync, turn);
+  Serial.printf("QH_SYNC status=%s http=%d\n",
+                result.error == qh_voice::QhSyncError::kNone ? "complete"
+                                                             : "failed",
+                result.http_status);
+}
+
+void completeTurn() {
+  stopAudioBus();
+  if (!voice_turn.apply(qh_voice::VoiceTurnEvent::kResponseDone)) {
+    failRuntime("provider_event_order_invalid");
     return;
   }
-  if (asr_transport.status() == qh_voice::AsrTransportStatus::kReady &&
-      asr_upload_offset < recording_samples) {
-    const std::size_t sample_count = std::min(
-        kAsrSamplesPerFrame, recording_samples - asr_upload_offset);
-    const std::size_t pcm_bytes = qh_voice::convertI2s32ToPcm16Le(
-        recording_buffer + asr_upload_offset, sample_count, asr_pcm_buffer,
-        sizeof(asr_pcm_buffer));
-    if (pcm_bytes == 0 ||
-        !asr_transport.sendPcm16(asr_pcm_buffer, pcm_bytes)) {
-      failRuntime("asr_send_failed");
+  device_display.show(qh_voice::UiState::kSuccess);
+  success_display_active = true;
+  success_display_started_ms = millis();
+  Serial.println("RUNTIME state=idle turn=complete");
+  syncCompletedTurn();
+}
+
+const char* providerErrorCode(std::string_view code) {
+  if (code.find("auth") != std::string_view::npos ||
+      code.find("401") != std::string_view::npos ||
+      code.find("credential") != std::string_view::npos) {
+    return "provider_auth_failed";
+  }
+  return "provider_rejected";
+}
+
+void serviceRealtimeEvents() {
+  qh_voice::RealtimeEvent event;
+  while (realtime_transport.popEvent(event)) {
+    switch (event.type) {
+      case qh_voice::RealtimeEventType::kTranscriptDelta:
+        current_transcript += event.text;
+        break;
+      case qh_voice::RealtimeEventType::kTranscriptCompleted:
+        if (!event.text.empty()) current_transcript = event.text;
+        if (active_config && active_config->assistant.show_reply_text &&
+            !current_transcript.empty()) {
+          device_display.showConversation("我听到了", current_transcript,
+                                          ST77XX_YELLOW);
+        }
+        break;
+      case qh_voice::RealtimeEventType::kOutputTextDelta:
+        current_reply += event.text;
+        break;
+      case qh_voice::RealtimeEventType::kOutputTextDone:
+        if (!event.text.empty()) current_reply = event.text;
+        break;
+      case qh_voice::RealtimeEventType::kOutputAudioStarted:
+        if (voice_turn.state() == qh_voice::VoiceTurnState::kWaitingResponse) {
+          voice_turn.apply(qh_voice::VoiceTurnEvent::kOutputAudioStarted);
+        }
+        device_display.show(qh_voice::UiState::kPlaying);
+        break;
+      case qh_voice::RealtimeEventType::kOutputAudioDelta:
+        if (!writeOutputAudio(event.audio_base64)) {
+          failRuntime("playback_failed");
+          return;
+        }
+        if (active_config && active_config->assistant.show_reply_text &&
+            !current_reply.empty()) {
+          device_display.showConversation("回答", current_reply,
+                                          ST77XX_GREEN);
+        }
+        break;
+      case qh_voice::RealtimeEventType::kOutputAudioDone:
+        output_audio_done_received = true;
+        playback_drain_started_ms = millis();
+        break;
+      case qh_voice::RealtimeEventType::kResponseDone:
+        response_done_received = true;
+        if (!speaker_running) completeTurn();
+        break;
+      case qh_voice::RealtimeEventType::kResponseCanceled:
+      case qh_voice::RealtimeEventType::kTranscriptFailed:
+        failRuntime("provider_response_failed");
+        return;
+      case qh_voice::RealtimeEventType::kError:
+        failRuntime(providerErrorCode(event.error_code));
+        return;
+      case qh_voice::RealtimeEventType::kProtocolError:
+        failRuntime("provider_protocol_failed");
+        return;
+      default:
+        break;
+    }
+  }
+}
+
+void serviceProvider() {
+  using qh_voice::RealtimeTransportStatus;
+  using qh_voice::VoiceTurnEvent;
+  using qh_voice::VoiceTurnState;
+
+  if (realtime_transport.status() != RealtimeTransportStatus::kIdle) {
+    realtime_transport.loop();
+  }
+  serviceRealtimeEvents();
+
+  if (voice_turn.state() == VoiceTurnState::kConnectingProvider) {
+    if (realtime_transport.status() == RealtimeTransportStatus::kReady) {
+      voice_turn.apply(VoiceTurnEvent::kProviderConnected);
+      device_display.show(qh_voice::UiState::kIdle);
+      Serial.println("RUNTIME state=idle provider=connected");
       return;
     }
-    asr_upload_offset += sample_count;
-  }
-  if (asr_transport.status() == qh_voice::AsrTransportStatus::kReady &&
-      asr_upload_offset == recording_samples && !asr_finish_sent) {
-    if (!asr_transport.finish()) {
-      failRuntime("asr_finish_failed");
+    if (static_cast<uint32_t>(millis() - provider_connect_started_ms) >=
+        kProviderConnectTimeoutMs) {
+      failRuntime("provider_connect_timeout");
       return;
     }
-    asr_finish_sent = true;
   }
-  if (asr_transport.status() == qh_voice::AsrTransportStatus::kComplete) {
-    const std::string transcript = asr_transport.transcript();
-    asr_transport.close();
-    completeProviderTurn(transcript);
+
+  const auto transport_status = realtime_transport.status();
+  if (transport_status == RealtimeTransportStatus::kProviderError) {
+    failRuntime(providerErrorCode(realtime_transport.providerErrorCode()));
     return;
   }
-  if (asr_transport.status() == qh_voice::AsrTransportStatus::kProviderError ||
-      asr_transport.status() == qh_voice::AsrTransportStatus::kProtocolError ||
-      asr_transport.status() == qh_voice::AsrTransportStatus::kDisconnected) {
-    const auto diagnostic = asr_transport.failure();
-    failRuntime("asr_failed");
-    Serial.printf("ASR_DIAGNOSTIC category=%s http=%d provider=%lu\n",
-                  qh_voice::asrFailureCategoryName(diagnostic.category),
-                  diagnostic.http_status,
-                  static_cast<unsigned long>(diagnostic.provider_code));
+  if (transport_status == RealtimeTransportStatus::kProtocolError) {
+    failRuntime("provider_protocol_failed");
+    return;
+  }
+  if (transport_status == RealtimeTransportStatus::kDisconnected &&
+      voice_turn.state() != VoiceTurnState::kError) {
+    failRuntime("provider_disconnected");
+    return;
+  }
+
+  if ((voice_turn.state() == VoiceTurnState::kWaitingResponse ||
+       voice_turn.state() == VoiceTurnState::kPlaying) &&
+      static_cast<uint32_t>(millis() - response_started_ms) >=
+          kProviderResponseTimeoutMs) {
+    failRuntime("provider_response_timeout");
+    return;
+  }
+  if (speaker_running && response_done_received && output_audio_done_received &&
+      static_cast<uint32_t>(millis() - playback_drain_started_ms) >=
+          kPlaybackDrainMs) {
+    completeTurn();
   }
 }
 
@@ -342,20 +450,21 @@ void serviceButton() {
       voice_turn.state() == qh_voice::VoiceTurnState::kIdle) {
     beginRecording();
   } else if (button.changedToReleased() &&
-             voice_turn.state() == qh_voice::VoiceTurnState::kRecording) {
-    beginTranscription();
+             voice_turn.state() ==
+                 qh_voice::VoiceTurnState::kRecordingAndStreaming) {
+    finishRecording();
   }
 }
 
 void startConfiguredRuntime() {
-  if (!active_config ||
-      !voice_turn.apply(qh_voice::VoiceTurnEvent::kConfigLoaded)) {
+  if (!active_config) {
+    device_display.show(qh_voice::UiState::kSetupRequired);
     return;
   }
-  connectWifi();
+  if (voice_turn.apply(qh_voice::VoiceTurnEvent::kConfigLoaded)) connectWifi();
 }
 
-void serviceWifiRuntime() {
+void serviceNetworkRuntime() {
   using qh_voice::VoiceTurnEvent;
   using qh_voice::VoiceTurnState;
 
@@ -370,47 +479,51 @@ void serviceWifiRuntime() {
     if (static_cast<uint32_t>(millis() - wifi_attempt_started_ms) >=
         kWifiConnectTimeoutMs) {
       WiFi.disconnect();
-      voice_turn.apply(VoiceTurnEvent::kFailure);
-      wifi_error_started_ms = millis();
-      Serial.println("RUNTIME state=error code=wifi_connect_timeout");
+      failRuntime("wifi_connect_timeout");
     }
     return;
   }
 
   if (voice_turn.state() == VoiceTurnState::kSyncingClock) {
     if (WiFi.status() != WL_CONNECTED) {
-      voice_turn.apply(VoiceTurnEvent::kFailure);
-      wifi_error_started_ms = millis();
-      Serial.println("RUNTIME state=error code=wifi_disconnected");
+      failRuntime("wifi_disconnected");
       return;
     }
     if (time(nullptr) >= 1704067200) {
       voice_turn.apply(VoiceTurnEvent::kClockSynchronized);
-      Serial.println("RUNTIME state=idle clock=synchronized");
+      startProviderConnection();
       return;
     }
     if (static_cast<uint32_t>(millis() - clock_sync_started_ms) >=
         kClockSyncTimeoutMs) {
-      voice_turn.apply(VoiceTurnEvent::kFailure);
-      wifi_error_started_ms = millis();
-      Serial.println("RUNTIME state=error code=clock_sync_timeout");
+      failRuntime("clock_sync_timeout");
     }
     return;
   }
 
-  if (voice_turn.state() == VoiceTurnState::kIdle &&
+  if ((voice_turn.state() == VoiceTurnState::kConnectingProvider ||
+       voice_turn.state() == VoiceTurnState::kIdle ||
+       voice_turn.state() == VoiceTurnState::kRecordingAndStreaming ||
+       voice_turn.state() == VoiceTurnState::kWaitingResponse ||
+       voice_turn.state() == VoiceTurnState::kPlaying) &&
       WiFi.status() != WL_CONNECTED) {
-    voice_turn.apply(VoiceTurnEvent::kFailure);
-    wifi_error_started_ms = millis();
-    Serial.println("RUNTIME state=error code=wifi_disconnected");
+    failRuntime("wifi_disconnected");
     return;
   }
 
   if (voice_turn.state() == VoiceTurnState::kError &&
-      static_cast<uint32_t>(millis() - wifi_error_started_ms) >=
-          kWifiRetryDelayMs &&
+      static_cast<uint32_t>(millis() - runtime_error_started_ms) >=
+          kRuntimeRetryDelayMs &&
       voice_turn.apply(VoiceTurnEvent::kRecover)) {
     connectWifi();
+  }
+
+  if (success_display_active &&
+      voice_turn.state() == VoiceTurnState::kIdle &&
+      static_cast<uint32_t>(millis() - success_display_started_ms) >=
+          kSuccessDisplayMs) {
+    success_display_active = false;
+    device_display.show(qh_voice::UiState::kIdle);
   }
 }
 
@@ -498,20 +611,12 @@ void readProvisioningSerial() {
 
 void setup() {
   Serial.begin(115200);
+  device_display.begin();
   delay(250);
   store_ready = config_store.begin();
   if (!store_ready) {
+    device_display.showError("config_store_unavailable");
     emitError("config_store_unavailable");
-    return;
-  }
-  if (!psramFound()) {
-    emitError("psram_not_found");
-    return;
-  }
-  recording_buffer = static_cast<int32_t*>(
-      ps_malloc(kMaximumRecordingSamples * sizeof(int32_t)));
-  if (recording_buffer == nullptr) {
-    emitError("recording_buffer_unavailable");
     return;
   }
   pinMode(kButtonPin, INPUT);
@@ -523,9 +628,9 @@ void setup() {
 
 void loop() {
   readProvisioningSerial();
-  serviceWifiRuntime();
+  serviceNetworkRuntime();
+  serviceProvider();
   serviceButton();
   serviceRecording();
-  serviceTranscription();
   delay(1);
 }

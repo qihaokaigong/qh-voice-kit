@@ -8,11 +8,10 @@ enum class VoiceTurnState {
   kUnconfigured,
   kConnectingWifi,
   kSyncingClock,
+  kConnectingProvider,
   kIdle,
-  kRecording,
-  kTranscribing,
-  kGeneratingReply,
-  kSynthesizing,
+  kRecordingAndStreaming,
+  kWaitingResponse,
   kPlaying,
   kError,
 };
@@ -22,39 +21,28 @@ enum class VoiceTurnEvent {
   kConfigCleared,
   kWifiConnected,
   kClockSynchronized,
+  kProviderConnected,
   kButtonPressed,
   kButtonReleased,
   kRecordingCancelled,
-  kTranscriptReady,
-  kReplyReady,
-  kAudioReady,
-  kPlaybackFinished,
+  kOutputAudioStarted,
+  kResponseDone,
   kFailure,
   kRecover,
 };
 
 inline std::string_view voiceTurnStateName(VoiceTurnState state) {
   switch (state) {
-    case VoiceTurnState::kUnconfigured:
-      return "unconfigured";
-    case VoiceTurnState::kConnectingWifi:
-      return "connecting_wifi";
-    case VoiceTurnState::kSyncingClock:
-      return "syncing_clock";
-    case VoiceTurnState::kIdle:
-      return "idle";
-    case VoiceTurnState::kRecording:
-      return "recording";
-    case VoiceTurnState::kTranscribing:
-      return "transcribing";
-    case VoiceTurnState::kGeneratingReply:
-      return "generating_reply";
-    case VoiceTurnState::kSynthesizing:
-      return "synthesizing";
-    case VoiceTurnState::kPlaying:
-      return "playing";
-    case VoiceTurnState::kError:
-      return "error";
+    case VoiceTurnState::kUnconfigured: return "unconfigured";
+    case VoiceTurnState::kConnectingWifi: return "connecting_wifi";
+    case VoiceTurnState::kSyncingClock: return "syncing_clock";
+    case VoiceTurnState::kConnectingProvider: return "connecting_provider";
+    case VoiceTurnState::kIdle: return "idle";
+    case VoiceTurnState::kRecordingAndStreaming:
+      return "recording_and_streaming";
+    case VoiceTurnState::kWaitingResponse: return "waiting_response";
+    case VoiceTurnState::kPlaying: return "playing";
+    case VoiceTurnState::kError: return "error";
   }
   return "error";
 }
@@ -92,38 +80,35 @@ class VoiceTurnMachine {
         break;
       case VoiceTurnState::kSyncingClock:
         if (event == VoiceTurnEvent::kClockSynchronized) {
+          next = VoiceTurnState::kConnectingProvider;
+        }
+        break;
+      case VoiceTurnState::kConnectingProvider:
+        if (event == VoiceTurnEvent::kProviderConnected) {
           next = VoiceTurnState::kIdle;
         }
         break;
       case VoiceTurnState::kIdle:
         if (event == VoiceTurnEvent::kButtonPressed) {
-          next = VoiceTurnState::kRecording;
+          next = VoiceTurnState::kRecordingAndStreaming;
         }
         break;
-      case VoiceTurnState::kRecording:
+      case VoiceTurnState::kRecordingAndStreaming:
         if (event == VoiceTurnEvent::kButtonReleased) {
-          next = VoiceTurnState::kTranscribing;
+          next = VoiceTurnState::kWaitingResponse;
         } else if (event == VoiceTurnEvent::kRecordingCancelled) {
           next = VoiceTurnState::kIdle;
         }
         break;
-      case VoiceTurnState::kTranscribing:
-        if (event == VoiceTurnEvent::kTranscriptReady) {
-          next = VoiceTurnState::kGeneratingReply;
-        }
-        break;
-      case VoiceTurnState::kGeneratingReply:
-        if (event == VoiceTurnEvent::kReplyReady) {
-          next = VoiceTurnState::kSynthesizing;
-        }
-        break;
-      case VoiceTurnState::kSynthesizing:
-        if (event == VoiceTurnEvent::kAudioReady) {
+      case VoiceTurnState::kWaitingResponse:
+        if (event == VoiceTurnEvent::kOutputAudioStarted) {
           next = VoiceTurnState::kPlaying;
+        } else if (event == VoiceTurnEvent::kResponseDone) {
+          next = VoiceTurnState::kIdle;
         }
         break;
       case VoiceTurnState::kPlaying:
-        if (event == VoiceTurnEvent::kPlaybackFinished) {
+        if (event == VoiceTurnEvent::kResponseDone) {
           next = VoiceTurnState::kIdle;
         }
         break;

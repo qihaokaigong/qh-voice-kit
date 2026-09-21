@@ -8,11 +8,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCES = [
+    "audio_frame_pacer_test.cpp",
     "asr_failure_diagnostic_test.cpp",
     "button_debouncer_test.cpp",
     "config_transaction_test.cpp",
     "device_config_wire_test.cpp",
     "device_config_test.cpp",
+    "display_view_test.cpp",
     "doubao_asr_protocol_test.cpp",
     "doubao_tts_protocol_test.cpp",
     "doubao_tts_sse_test.cpp",
@@ -21,6 +23,7 @@ SOURCES = [
     "provider_request_test.cpp",
     "provisioning_command_test.cpp",
     "qh_sync_protocol_test.cpp",
+    "realtime_voice_protocol_test.cpp",
     "secure_endpoint_test.cpp",
     "voice_turn_state_test.cpp",
 ]

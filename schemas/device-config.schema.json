@@ -1,22 +1,20 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://qh.example/schemas/voice-kit/device-config-v2.json",
+  "$id": "https://qh.example/schemas/voice-kit/device-config-v3.json",
   "title": "QH Voice Kit device configuration",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "schemaVersion",
     "network",
-    "stt",
-    "reply",
-    "tts",
+    "realtimeVoice",
     "assistant",
     "qhSync",
     "preferences"
   ],
   "properties": {
     "schemaVersion": {
-      "const": 2
+      "const": 3
     },
     "network": {
       "type": "object",
@@ -33,74 +31,29 @@
         }
       }
     },
-    "stt": {
+    "realtimeVoice": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "adapter",
-        "endpoint",
-        "apiKey",
-        "resourceId"
-      ],
+      "required": ["adapter", "apiKey", "voice"],
       "properties": {
-        "adapter": {"const": "doubao-asr-v1"},
-        "endpoint": {"type": "string", "pattern": "^wss://"},
+        "adapter": {"const": "doubao-seeduplex-v1"},
         "apiKey": {
           "type": "string",
           "minLength": 1,
           "writeOnly": true,
           "x-qh-secret": true
         },
-        "resourceId": {"type": "string", "minLength": 1}
-      }
-    },
-    "reply": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["adapter", "endpoint", "model", "credential"],
-      "properties": {
-        "adapter": {"const": "openai-compatible-v1"},
-        "endpoint": {"type": "string", "pattern": "^https://"},
-        "model": {"type": "string", "minLength": 1},
-        "credential": {
-          "type": "string",
-          "minLength": 1,
-          "writeOnly": true,
-          "x-qh-secret": true
-        }
-      }
-    },
-    "tts": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "adapter",
-        "endpoint",
-        "credential",
-        "resourceId",
-        "speaker"
-      ],
-      "properties": {
-        "adapter": {"const": "doubao-tts-v1"},
-        "endpoint": {"type": "string", "pattern": "^https://"},
-        "credential": {
-          "type": "string",
-          "minLength": 1,
-          "writeOnly": true,
-          "x-qh-secret": true
-        },
-        "resourceId": {"type": "string", "minLength": 1},
-        "speaker": {"type": "string", "minLength": 1}
+        "voice": {"type": "string", "minLength": 1, "maxLength": 128}
       }
     },
     "assistant": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["language", "systemPrompt", "maxReplyChars"],
+      "required": ["language", "systemPrompt", "showReplyText"],
       "properties": {
         "language": {"type": "string", "minLength": 1},
         "systemPrompt": {"type": "string", "maxLength": 2000},
-        "maxReplyChars": {"type": "integer", "minimum": 1, "maximum": 1000}
+        "showReplyText": {"type": "boolean"}
       }
     },
     "qhSync": {

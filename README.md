@@ -2,74 +2,70 @@
 
 Open ESP32-S3 firmware and Release contracts for the QH voice assistant.
 
-The target runtime is deliberately direct:
+The default runtime is deliberately direct:
 
 ```text
-ESP32 -> STT Provider -> Reply Provider -> TTS Provider -> ESP32
+ESP32 microphone
+  -> Doubao Realtime Voice Model 3.0 (Seeduplex), one WebSocket session
+  -> ESP32 speaker and ST7789 screen
 ```
 
-There is no Voice Gateway or computer-side runtime service. User configuration is written after flashing and does not belong in source code or public firmware images.
+There is no Voice Gateway or computer-side runtime service. The user-owned API
+Key and Wi-Fi configuration are written after flashing; they do not belong in
+source code, public firmware images, Agent messages, or QH Platform.
 
 ## Repository boundary
 
-This repository owns:
+This repository owns ESP32 firmware, device configuration and provisioning
+protocols, the Seeduplex adapter, optional QH structured-data sync, screen UI,
+hardware profiles, Release manifests, build assets, and host-testable protocol
+and state-machine code. Agent workflow and cross-platform installation live in
+the separate `qh-voice-skill` repository.
 
-- ESP32 firmware;
-- device configuration and provisioning protocols;
-- STT, reply, TTS, and QH structured-data adapters;
-- hardware profile, Release Manifest, build, and acceptance assets;
-- host-testable protocol and state-machine code.
-
-Agent workflow and cross-platform installer orchestration live in the separate `qh-voice-skill` repository.
+Legacy ASR, OpenAI-compatible reply, and TTS protocol files remain temporarily
+as migration references. The default firmware does not include or call them.
 
 ## Current implementation status
 
-The repository now contains a compilable ESP32-S3 direct-Provider voice-loop
-candidate and host-tested protocol cores:
+The development candidate now includes:
 
-- versioned device configuration plus a JSON Schema;
-- current-console Doubao ASR authentication with a single `X-Api-Key` (legacy
-  APP ID + Access Token configuration is not part of this candidate);
-- a compact serial wire format shared with `qh-voice-skill`;
-- SHA-256 checked serial provisioning;
-- double-slot NVS writes with readback before activation;
-- Doubao streaming ASR framing and response parsing;
-- OpenAI-compatible reply request and response handling;
-- Doubao TTS V3 request and fragmented SSE response handling;
-- verified TLS via the ESP32 root-CA bundle, with NTP synchronization before
-  Provider calls;
-- hold-to-record INMP441 capture, PCM conversion, and Doubao ASR upload;
-- OpenAI-compatible reply generation, Doubao PCM speech synthesis, and
-  MAX98357A playback;
-- optional QH structured turn-event upload that never contains raw audio or
-  Provider credentials and never changes the local turn result;
-- an explicit runtime state machine and redacted serial status/error output;
-- a reproducible Arduino build profile pinned to ESP32 core 3.3.11 and
-  WebSockets 2.7.2;
-- the recorded N16R8 hardware profile.
+- configuration Schema/Wire v3 with one Doubao realtime API Key;
+- SHA-256 checked serial provisioning and double-slot NVS activation;
+- direct verified-TLS WebSocket connection to the official Seeduplex endpoint;
+- official session-create, mute/unmute, audio append, commit, transcription,
+  response text, response PCM, completion, and error event handling;
+- push-to-talk half-duplex input using 16 kHz mono PCM in 20 ms / 640 byte
+  frames;
+- incremental 24 kHz PCM playback through MAX98357A;
+- mandatory ST7789 Chinese UI for boot, setup, connection, idle, recording,
+  waiting, playback, success, and recoverable errors;
+- optional screen transcript/reply text and configurable speaker volume;
+- optional best-effort QH structured turn-event sync without raw audio or
+  Provider credentials;
+- a reproducible N16R8 Arduino profile with pinned networking and display
+  dependencies.
 
-This is still a candidate development build. Candidate Release packaging is
-available, but the display UI, durable QH sync outbox/retry path, deterministic
-layered health checks, and real-device Provider/playback acceptance are not
-complete. There is therefore no `allowed` end-user Release yet. A successful
-compile or candidate package is not a successful real conversation.
+The exact hardware profile has no recorded screen-backlight control pin, so the
+configuration intentionally does not offer a non-functional brightness field.
 
-Run all host contract tests with:
+This is still a candidate build. Host contract tests and an Arduino compile are
+not proof of a successful real-device conversation. Real hardware display,
+Provider, microphone, playback, reconnect, and QH-sync acceptance are still
+required before an `allowed` end-user Release can exist.
+
+Run host tests:
 
 ```bash
 python3 -m unittest discover -s tests -v
 ```
 
-Compile the current voice-loop candidate for the recorded N16R8 profile. The
-Arduino profile downloads pinned build dependencies into its isolated cache on
-the first run:
+Compile for the recorded N16R8 profile:
 
 ```bash
 ./scripts/compile.sh
 ```
 
-Package the exact build output as a non-stable candidate for controlled
-hardware acceptance:
+Package the exact build output as a non-stable candidate:
 
 ```bash
 python3 scripts/candidate_release.py \
@@ -78,9 +74,6 @@ python3 scripts/candidate_release.py \
   --release-id <release-id>
 ```
 
-The packager reads the compiler-produced `flash_args`, requires the exact N16R8
-artifact set and addresses, copies only those binaries, and records their sizes
-and SHA-256 values. It always writes `acceptance.status: candidate`; promotion
-requires separate real-device evidence.
-
-The exact first hardware profile remains the recorded ESP32-S3 N16R8 reference build. Do not infer compatibility from the chip family alone.
+The packager always writes `acceptance.status: candidate`; promotion requires
+separate real-device evidence. Do not infer compatibility from the ESP32-S3
+chip family alone.

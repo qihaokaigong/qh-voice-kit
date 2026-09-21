@@ -31,13 +31,17 @@ class RepositoryContractsTest(unittest.TestCase):
             "PartitionScheme=app3M_fat9M_16MB", profile["arduino"]["fqbn"]
         )
 
-    def test_sketch_profile_pins_core_and_websocket_library(self) -> None:
+    def test_sketch_profile_pins_core_websocket_and_display_libraries(self) -> None:
         profile = (
             ROOT / "firmware" / "esp32_voice_kit" / "sketch.yaml"
         ).read_text(encoding="utf-8")
 
         self.assertIn("platform: esp32:esp32 (3.3.11)", profile)
         self.assertIn("WebSockets (2.7.2)", profile)
+        self.assertIn("Adafruit BusIO (1.17.4)", profile)
+        self.assertIn("Adafruit GFX Library (1.12.6)", profile)
+        self.assertIn("Adafruit ST7735 and ST7789 Library (1.11.0)", profile)
+        self.assertIn("U8g2_for_Adafruit_GFX (1.8.0)", profile)
         self.assertIn("PartitionScheme=app3M_fat9M_16MB", profile)
 
     def test_device_config_schema_marks_every_secret_write_only(self) -> None:
@@ -49,9 +53,7 @@ class RepositoryContractsTest(unittest.TestCase):
 
         paths = [
             ("network", "password"),
-            ("stt", "apiKey"),
-            ("reply", "credential"),
-            ("tts", "credential"),
+            ("realtimeVoice", "apiKey"),
             ("qhSync", "credential"),
         ]
         for section, field in paths:
@@ -60,13 +62,8 @@ class RepositoryContractsTest(unittest.TestCase):
                 self.assertTrue(definition["writeOnly"])
                 self.assertTrue(definition["x-qh-secret"])
 
-        self.assertEqual(
-            schema["properties"]["stt"]["properties"]["endpoint"]["pattern"],
-            "^wss://",
-        )
-        self.assertEqual(
-            schema["properties"]["reply"]["properties"]["endpoint"]["pattern"],
-            "^https://",
+        self.assertNotIn(
+            "endpoint", schema["properties"]["realtimeVoice"]["properties"]
         )
 
 

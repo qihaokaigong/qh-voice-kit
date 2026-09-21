@@ -7,16 +7,11 @@ namespace {
 
 qh_voice::DeviceConfig validConfig() {
   return {
-      2,
+      3,
       {"studio-wifi", "wifi-secret"},
-      {"doubao-asr-v1",
-       "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel", "asr-api-key",
-       "volc.bigasr.sauc.duration"},
-      {"openai-compatible-v1", "https://api.example.com/v1", "reply-model",
-       "reply-secret"},
-      {"doubao-tts-v1", "https://openspeech.bytedance.com", "tts-secret",
-       "seed-tts-2.0", "speaker-id"},
-      {"zh-CN", "Reply briefly.", 120},
+      {"doubao-seeduplex-v1", "realtime-api-key",
+       "zh_female_xiaohe_jupiter_bigtts"},
+      {"zh-CN", "Reply briefly.", true},
       {true, "https://device.example.com", "device-1", "qh-secret"},
       {50},
   };
@@ -31,36 +26,28 @@ void acceptsCompleteConfiguration() {
 void rejectsMissingRuntimeSecrets() {
   auto config = validConfig();
   config.network.password.clear();
-  config.stt.api_key.clear();
-  config.reply.credential.clear();
-  config.tts.credential.clear();
+  config.realtime_voice.api_key.clear();
 
   const auto result = qh_voice::validateDeviceConfig(config);
   assert(!result.ok());
   assert(result.has(qh_voice::ConfigError::kMissingWifiPassword));
-  assert(result.has(qh_voice::ConfigError::kMissingSttCredential));
-  assert(result.has(qh_voice::ConfigError::kMissingReplyCredential));
-  assert(result.has(qh_voice::ConfigError::kMissingTtsCredential));
+  assert(result.has(qh_voice::ConfigError::kMissingRealtimeVoiceCredential));
 }
 
-void rejectsUnsafeProviderEndpoints() {
+void rejectsUnsupportedAdapterAndMissingVoice() {
   auto config = validConfig();
-  config.stt.endpoint = "https://openspeech.bytedance.com/api/v3/sauc/bigmodel";
-  config.reply.endpoint = "https://user:password@example.com/v1";
-  config.tts.endpoint = "file:///tmp/audio";
+  config.realtime_voice.adapter = "custom-realtime";
+  config.realtime_voice.voice.clear();
 
   const auto result = qh_voice::validateDeviceConfig(config);
-  assert(result.has(qh_voice::ConfigError::kInvalidSttEndpoint));
-  assert(result.has(qh_voice::ConfigError::kInvalidReplyEndpoint));
-  assert(result.has(qh_voice::ConfigError::kInvalidTtsEndpoint));
+  assert(result.has(qh_voice::ConfigError::kUnsupportedRealtimeVoiceAdapter));
+  assert(result.has(qh_voice::ConfigError::kInvalidRealtimeVoiceConfig));
 }
 
 void allowsDisabledQhSyncWithoutCredentials() {
   auto config = validConfig();
   config.qh_sync = {false, "", "", ""};
-
-  const auto result = qh_voice::validateDeviceConfig(config);
-  assert(result.ok());
+  assert(qh_voice::validateDeviceConfig(config).ok());
 }
 
 void redactedSummaryNeverContainsSecrets() {
@@ -68,43 +55,23 @@ void redactedSummaryNeverContainsSecrets() {
   const std::string summary = qh_voice::redactedSummary(config);
 
   assert(summary.find("wifi-secret") == std::string::npos);
-  assert(summary.find("asr-api-key") == std::string::npos);
-  assert(summary.find("reply-secret") == std::string::npos);
-  assert(summary.find("tts-secret") == std::string::npos);
+  assert(summary.find("realtime-api-key") == std::string::npos);
   assert(summary.find("qh-secret") == std::string::npos);
   assert(summary.find("studio-wifi") != std::string::npos);
-  assert(summary.find("doubao-asr-v1") != std::string::npos);
+  assert(summary.find("doubao-seeduplex-v1") != std::string::npos);
+  assert(summary.find("zh_female_xiaohe_jupiter_bigtts") !=
+         std::string::npos);
   assert(summary.find("configured") != std::string::npos);
 }
 
-void rejectsUnsupportedSchemaAndUnsafePreferences() {
+void rejectsOldSchemaAndUnsafePreferences() {
   auto config = validConfig();
-  config.schema_version = 1;
-  config.assistant.max_reply_chars = 0;
+  config.schema_version = 2;
   config.preferences.volume_percent = 101;
 
   const auto result = qh_voice::validateDeviceConfig(config);
   assert(result.has(qh_voice::ConfigError::kUnsupportedSchema));
-  assert(result.has(qh_voice::ConfigError::kInvalidReplyLimit));
   assert(result.has(qh_voice::ConfigError::kInvalidVolume));
-}
-
-void rejectsUnsupportedAdaptersAndIncompleteProviderIds() {
-  auto config = validConfig();
-  config.stt.adapter = "custom-asr";
-  config.stt.resource_id.clear();
-  config.reply.adapter = "custom-reply";
-  config.reply.model.clear();
-  config.tts.adapter = "custom-tts";
-  config.tts.speaker.clear();
-
-  const auto result = qh_voice::validateDeviceConfig(config);
-  assert(result.has(qh_voice::ConfigError::kUnsupportedSttAdapter));
-  assert(result.has(qh_voice::ConfigError::kInvalidSttConfig));
-  assert(result.has(qh_voice::ConfigError::kUnsupportedReplyAdapter));
-  assert(result.has(qh_voice::ConfigError::kInvalidReplyConfig));
-  assert(result.has(qh_voice::ConfigError::kUnsupportedTtsAdapter));
-  assert(result.has(qh_voice::ConfigError::kInvalidTtsConfig));
 }
 
 }  // namespace
@@ -112,10 +79,9 @@ void rejectsUnsupportedAdaptersAndIncompleteProviderIds() {
 int main() {
   acceptsCompleteConfiguration();
   rejectsMissingRuntimeSecrets();
-  rejectsUnsafeProviderEndpoints();
+  rejectsUnsupportedAdapterAndMissingVoice();
   allowsDisabledQhSyncWithoutCredentials();
   redactedSummaryNeverContainsSecrets();
-  rejectsUnsupportedSchemaAndUnsafePreferences();
-  rejectsUnsupportedAdaptersAndIncompleteProviderIds();
+  rejectsOldSchemaAndUnsafePreferences();
   return 0;
 }
