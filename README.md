@@ -45,8 +45,10 @@ The development candidate now includes:
 - a reproducible N16R8 Arduino profile with pinned networking and display
   dependencies.
 
-The exact hardware profile has no recorded screen-backlight control pin, so the
-configuration intentionally does not offer a non-functional brightness field.
+The exact hardware profile binds the display to the verified GMT130-V1.0
+240x240 module and hardware SPI mode 3. It has no recorded screen-backlight
+control pin, so the configuration intentionally does not offer a non-functional
+brightness field.
 
 This is still a candidate build. Host contract tests and an Arduino compile are
 not proof of a successful real-device conversation. Real hardware display,

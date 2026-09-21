@@ -20,7 +20,7 @@ class DeviceDisplay {
 
   void begin() {
     SPI.begin(kClockPin, -1, kMosiPin, kChipSelectPin);
-    panel_.init(240, 240);
+    panel_.init(240, 240, SPI_MODE3);
     panel_.setRotation(0);
     panel_.fillScreen(ST77XX_BLACK);
     text_.begin(panel_);

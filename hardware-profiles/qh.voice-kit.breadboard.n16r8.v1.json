@@ -20,9 +20,11 @@
       "reset": 11,
       "dc": 12,
       "cs": -1,
+      "module": "GMT130-V1.0",
       "driver": "ST7789",
       "width": 240,
-      "height": 240
+      "height": 240,
+      "spiMode": 3
     },
     "speaker": {
       "bclk": 16,
