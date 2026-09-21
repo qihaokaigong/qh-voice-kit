@@ -65,4 +65,31 @@ inline ReplyError mapReplyHttpStatus(int status) {
   return ReplyError::kProtocol;
 }
 
+inline std::string truncateUtf8(std::string_view text,
+                                std::size_t maximum_characters) {
+  std::size_t cursor = 0;
+  std::size_t characters = 0;
+  while (cursor < text.size() && characters < maximum_characters) {
+    const unsigned char lead = static_cast<unsigned char>(text[cursor]);
+    std::size_t width = 1;
+    if ((lead & 0xE0) == 0xC0) {
+      width = 2;
+    } else if ((lead & 0xF0) == 0xE0) {
+      width = 3;
+    } else if ((lead & 0xF8) == 0xF0) {
+      width = 4;
+    }
+    if (width > text.size() - cursor) break;
+    bool valid = true;
+    for (std::size_t index = 1; index < width; ++index) {
+      const unsigned char continuation =
+          static_cast<unsigned char>(text[cursor + index]);
+      if ((continuation & 0xC0) != 0x80) valid = false;
+    }
+    cursor += valid ? width : 1;
+    ++characters;
+  }
+  return std::string(text.substr(0, cursor));
+}
+
 }  // namespace qh_voice

@@ -24,8 +24,8 @@ Agent workflow and cross-platform installer orchestration live in the separate `
 
 ## Current implementation status
 
-The repository now contains a compilable ESP32-S3 provisioning firmware and
-host-tested protocol cores:
+The repository now contains a compilable ESP32-S3 direct-Provider voice-loop
+candidate and host-tested protocol cores:
 
 - versioned device configuration plus a JSON Schema;
 - a compact serial wire format shared with `qh-voice-skill`;
@@ -34,12 +34,23 @@ host-tested protocol cores:
 - Doubao streaming ASR framing and response parsing;
 - OpenAI-compatible reply request and response handling;
 - Doubao TTS V3 request and fragmented SSE response handling;
+- verified TLS via the ESP32 root-CA bundle, with NTP synchronization before
+  Provider calls;
+- hold-to-record INMP441 capture, PCM conversion, and Doubao ASR upload;
+- OpenAI-compatible reply generation, Doubao PCM speech synthesis, and
+  MAX98357A playback;
+- optional QH structured turn-event upload that never contains raw audio or
+  Provider credentials and never changes the local turn result;
+- an explicit runtime state machine and redacted serial status/error output;
+- a reproducible Arduino build profile pinned to ESP32 core 3.3.11 and
+  WebSockets 2.7.2;
 - the recorded N16R8 hardware profile.
 
-This is still a candidate development build. Provider network transports,
-microphone/display/speaker integration into the new sketch, the full voice
-state machine, Release generation, and real-device acceptance are not complete.
-There is therefore no `allowed` end-user Release yet.
+This is still a candidate development build. The display UI, durable QH sync
+outbox/retry path, deterministic layered health checks, Release generation, and
+real-device Provider/playback acceptance are not complete. There is therefore
+no `allowed` end-user Release yet. A successful compile is not a successful
+real conversation.
 
 Run all host contract tests with:
 
@@ -47,7 +58,9 @@ Run all host contract tests with:
 python3 -m unittest discover -s tests -v
 ```
 
-Compile the current provisioning firmware for the recorded N16R8 profile:
+Compile the current voice-loop candidate for the recorded N16R8 profile. The
+Arduino profile downloads pinned build dependencies into its isolated cache on
+the first run:
 
 ```bash
 ./scripts/compile.sh

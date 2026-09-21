@@ -8,6 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCES = [
+    "button_debouncer_test.cpp",
     "config_transaction_test.cpp",
     "device_config_wire_test.cpp",
     "device_config_test.cpp",
@@ -15,7 +16,12 @@ SOURCES = [
     "doubao_tts_protocol_test.cpp",
     "doubao_tts_sse_test.cpp",
     "openai_reply_protocol_test.cpp",
+    "pcm_audio_test.cpp",
+    "provider_request_test.cpp",
     "provisioning_command_test.cpp",
+    "qh_sync_protocol_test.cpp",
+    "secure_endpoint_test.cpp",
+    "voice_turn_state_test.cpp",
 ]
 
 

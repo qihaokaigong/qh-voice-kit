@@ -46,6 +46,12 @@ void mapsHttpFailuresToStableCodes() {
   assert(qh_voice::mapReplyHttpStatus(418) == qh_voice::ReplyError::kProtocol);
 }
 
+void truncatesReplyByUtf8CharactersWithoutSplittingBytes() {
+  assert(qh_voice::truncateUtf8("你好abc", 3) == "你好a");
+  assert(qh_voice::truncateUtf8("short", 10) == "short");
+  assert(qh_voice::truncateUtf8("abc", 0).empty());
+}
+
 }  // namespace
 
 int main() {
@@ -53,5 +59,6 @@ int main() {
   parsesAssistantContent();
   rejectsMissingOrBlankAssistantContent();
   mapsHttpFailuresToStableCodes();
+  truncatesReplyByUtf8CharactersWithoutSplittingBytes();
   return 0;
 }

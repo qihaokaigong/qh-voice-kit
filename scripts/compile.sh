@@ -6,7 +6,6 @@ script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 repo_root=$(dirname "$script_dir")
 sketch="$repo_root/firmware/esp32_voice_kit"
 build_path="$repo_root/.build/esp32_voice_kit"
-fqbn='esp32:esp32:esp32s3:UploadSpeed=921600,USBMode=hwcdc,CDCOnBoot=default,MSCOnBoot=default,DFUOnBoot=default,UploadMode=default,CPUFreq=240,FlashMode=qio,FlashSize=16M,PartitionScheme=default,DebugLevel=none,PSRAM=opi,LoopCore=1,EventsCore=1,EraseFlash=none,JTAGAdapter=default,ZigbeeMode=default'
 
 if command -v arduino-cli >/dev/null 2>&1; then
   cli=$(command -v arduino-cli)
@@ -20,4 +19,4 @@ if [ ! -x "$cli" ]; then
 fi
 
 mkdir -p "$build_path"
-"$cli" compile --fqbn "$fqbn" --build-path "$build_path" "$sketch"
+"$cli" compile --profile qh_n16r8 --build-path "$build_path" "$sketch"

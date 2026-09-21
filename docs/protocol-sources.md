@@ -12,6 +12,10 @@ current protocol cores were based on these sources:
   <https://www.volcengine.com/docs/6561/1598757?lang=zh>
 - ByteDance official AgentKit TTS sample:
   <https://github.com/bytedance/agentkit-samples/blob/main/skills/byted-text-to-speech/scripts/text_to_speech.py>
+- Arduino CLI reproducible sketch profiles:
+  <https://docs.arduino.cc/arduino-cli/sketch-project-file/>
+- Arduino WebSockets release 2.7.2:
+  <https://github.com/Links2004/arduinoWebSockets/releases/tag/2.7.2>
 - Espressif esptool documentation:
   <https://docs.espressif.com/projects/esptool/en/latest/esp32s3/esptool/>
 

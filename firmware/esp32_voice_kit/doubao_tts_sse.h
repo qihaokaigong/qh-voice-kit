@@ -6,6 +6,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "openai_reply_protocol.h"
@@ -126,6 +127,7 @@ class DoubaoTtsSseParser {
   DoubaoTtsStatus status() const { return status_; }
   int providerCode() const { return provider_code_; }
   const std::vector<uint8_t>& audio() const { return audio_; }
+  std::vector<uint8_t> takeAudio() { return std::move(audio_); }
 
  private:
   bool isError() const {

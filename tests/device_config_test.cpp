@@ -89,6 +89,24 @@ void rejectsUnsupportedSchemaAndUnsafePreferences() {
   assert(result.has(qh_voice::ConfigError::kInvalidVolume));
 }
 
+void rejectsUnsupportedAdaptersAndIncompleteProviderIds() {
+  auto config = validConfig();
+  config.stt.adapter = "custom-asr";
+  config.stt.app_key.clear();
+  config.reply.adapter = "custom-reply";
+  config.reply.model.clear();
+  config.tts.adapter = "custom-tts";
+  config.tts.speaker.clear();
+
+  const auto result = qh_voice::validateDeviceConfig(config);
+  assert(result.has(qh_voice::ConfigError::kUnsupportedSttAdapter));
+  assert(result.has(qh_voice::ConfigError::kInvalidSttConfig));
+  assert(result.has(qh_voice::ConfigError::kUnsupportedReplyAdapter));
+  assert(result.has(qh_voice::ConfigError::kInvalidReplyConfig));
+  assert(result.has(qh_voice::ConfigError::kUnsupportedTtsAdapter));
+  assert(result.has(qh_voice::ConfigError::kInvalidTtsConfig));
+}
+
 }  // namespace
 
 int main() {
@@ -98,5 +116,6 @@ int main() {
   allowsDisabledQhSyncWithoutCredentials();
   redactedSummaryNeverContainsSecrets();
   rejectsUnsupportedSchemaAndUnsafePreferences();
+  rejectsUnsupportedAdaptersAndIncompleteProviderIds();
   return 0;
 }

@@ -27,6 +27,18 @@ class RepositoryContractsTest(unittest.TestCase):
         self.assertEqual(profile["pins"]["speaker"], {"bclk": 16, "lrc": 17, "din": 18})
         self.assertIn("FlashSize=16M", profile["arduino"]["fqbn"])
         self.assertIn("PSRAM=opi", profile["arduino"]["fqbn"])
+        self.assertIn(
+            "PartitionScheme=app3M_fat9M_16MB", profile["arduino"]["fqbn"]
+        )
+
+    def test_sketch_profile_pins_core_and_websocket_library(self) -> None:
+        profile = (
+            ROOT / "firmware" / "esp32_voice_kit" / "sketch.yaml"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("platform: esp32:esp32 (3.3.11)", profile)
+        self.assertIn("WebSockets (2.7.2)", profile)
+        self.assertIn("PartitionScheme=app3M_fat9M_16MB", profile)
 
     def test_device_config_schema_marks_every_secret_write_only(self) -> None:
         schema = json.loads(

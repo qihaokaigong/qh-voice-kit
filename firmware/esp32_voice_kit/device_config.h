@@ -6,6 +6,8 @@
 #include <string_view>
 #include <vector>
 
+#include "secure_endpoint.h"
+
 namespace qh_voice {
 
 constexpr uint16_t kDeviceConfigSchemaVersion = 1;
@@ -73,6 +75,12 @@ enum class ConfigError {
   kMissingSttCredential,
   kMissingReplyCredential,
   kMissingTtsCredential,
+  kUnsupportedSttAdapter,
+  kUnsupportedReplyAdapter,
+  kUnsupportedTtsAdapter,
+  kInvalidSttConfig,
+  kInvalidReplyConfig,
+  kInvalidTtsConfig,
   kInvalidSttEndpoint,
   kInvalidReplyEndpoint,
   kInvalidTtsEndpoint,
@@ -91,28 +99,12 @@ struct ConfigValidationResult {
   }
 };
 
-inline bool isSecureEndpoint(std::string_view endpoint,
-                             std::string_view prefix) {
-  if (endpoint.size() <= prefix.size() || endpoint.substr(0, prefix.size()) != prefix) {
-    return false;
-  }
-  const std::size_t authority_end = endpoint.find_first_of("/?#", prefix.size());
-  const std::string_view authority = endpoint.substr(
-      prefix.size(), authority_end == std::string_view::npos
-                         ? std::string_view::npos
-                         : authority_end - prefix.size());
-  if (authority.empty() || authority.find('@') != std::string_view::npos) {
-    return false;
-  }
-  return endpoint.find_first_of("\r\n\t ") == std::string_view::npos;
-}
-
 inline bool isHttpsEndpoint(std::string_view endpoint) {
-  return isSecureEndpoint(endpoint, "https://");
+  return parseSecureEndpoint(endpoint, "https://", 443).has_value();
 }
 
 inline bool isSecureWebSocketEndpoint(std::string_view endpoint) {
-  return isSecureEndpoint(endpoint, "wss://");
+  return parseSecureEndpoint(endpoint, "wss://", 443).has_value();
 }
 
 inline ConfigValidationResult validateDeviceConfig(const DeviceConfig& config) {
@@ -134,6 +126,24 @@ inline ConfigValidationResult validateDeviceConfig(const DeviceConfig& config) {
   }
   if (config.tts.credential.empty()) {
     result.errors.push_back(ConfigError::kMissingTtsCredential);
+  }
+  if (config.stt.adapter != "doubao-asr-v1") {
+    result.errors.push_back(ConfigError::kUnsupportedSttAdapter);
+  }
+  if (config.reply.adapter != "openai-compatible-v1") {
+    result.errors.push_back(ConfigError::kUnsupportedReplyAdapter);
+  }
+  if (config.tts.adapter != "doubao-tts-v1") {
+    result.errors.push_back(ConfigError::kUnsupportedTtsAdapter);
+  }
+  if (config.stt.app_key.empty() || config.stt.resource_id.empty()) {
+    result.errors.push_back(ConfigError::kInvalidSttConfig);
+  }
+  if (config.reply.model.empty()) {
+    result.errors.push_back(ConfigError::kInvalidReplyConfig);
+  }
+  if (config.tts.resource_id.empty() || config.tts.speaker.empty()) {
+    result.errors.push_back(ConfigError::kInvalidTtsConfig);
   }
   if (!isSecureWebSocketEndpoint(config.stt.endpoint)) {
     result.errors.push_back(ConfigError::kInvalidSttEndpoint);
