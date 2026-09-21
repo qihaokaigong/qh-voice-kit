@@ -28,6 +28,8 @@ The repository now contains a compilable ESP32-S3 direct-Provider voice-loop
 candidate and host-tested protocol cores:
 
 - versioned device configuration plus a JSON Schema;
+- current-console Doubao ASR authentication with a single `X-Api-Key` (legacy
+  APP ID + Access Token configuration is not part of this candidate);
 - a compact serial wire format shared with `qh-voice-skill`;
 - SHA-256 checked serial provisioning;
 - double-slot NVS writes with readback before activation;

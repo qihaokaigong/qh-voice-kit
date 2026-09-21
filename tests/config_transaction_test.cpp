@@ -6,11 +6,11 @@ namespace {
 
 qh_voice::DeviceConfig validConfig() {
   return {
-      1,
+      2,
       {"studio-wifi", "wifi-secret"},
       {"doubao-asr-v1",
-       "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel", "app-key",
-       "asr-secret", "volc.bigasr.sauc.duration"},
+       "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel", "asr-api-key",
+       "volc.bigasr.sauc.duration"},
       {"openai-compatible-v1", "https://api.example.com/v1", "reply-model",
        "reply-secret"},
       {"doubao-tts-v1", "https://openspeech.bytedance.com", "tts-secret",

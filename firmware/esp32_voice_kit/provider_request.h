@@ -18,12 +18,11 @@ struct ProviderTransportRequest {
 };
 
 inline ProviderTransportRequest buildDoubaoAsrTransportRequest(
-    std::string endpoint, std::string app_key, std::string credential,
-    std::string resource_id, std::string request_id) {
+    std::string endpoint, std::string api_key, std::string resource_id,
+    std::string request_id) {
   return {
       std::move(endpoint),
-      {{"X-Api-App-Key", std::move(app_key)},
-       {"X-Api-Access-Key", std::move(credential)},
+      {{"X-Api-Key", std::move(api_key)},
        {"X-Api-Resource-Id", std::move(resource_id)},
        {"X-Api-Connect-Id", std::move(request_id)}}};
 }

@@ -7,11 +7,11 @@ namespace {
 
 qh_voice::DeviceConfig validConfig() {
   return {
-      1,
+      2,
       {"studio-wifi", "wifi-secret"},
       {"doubao-asr-v1",
-       "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel", "app-key",
-       "asr-secret", "volc.bigasr.sauc.duration"},
+       "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel", "asr-api-key",
+       "volc.bigasr.sauc.duration"},
       {"openai-compatible-v1", "https://api.example.com/v1", "reply-model",
        "reply-secret"},
       {"doubao-tts-v1", "https://openspeech.bytedance.com", "tts-secret",
@@ -31,7 +31,7 @@ void acceptsCompleteConfiguration() {
 void rejectsMissingRuntimeSecrets() {
   auto config = validConfig();
   config.network.password.clear();
-  config.stt.credential.clear();
+  config.stt.api_key.clear();
   config.reply.credential.clear();
   config.tts.credential.clear();
 
@@ -68,7 +68,7 @@ void redactedSummaryNeverContainsSecrets() {
   const std::string summary = qh_voice::redactedSummary(config);
 
   assert(summary.find("wifi-secret") == std::string::npos);
-  assert(summary.find("asr-secret") == std::string::npos);
+  assert(summary.find("asr-api-key") == std::string::npos);
   assert(summary.find("reply-secret") == std::string::npos);
   assert(summary.find("tts-secret") == std::string::npos);
   assert(summary.find("qh-secret") == std::string::npos);
@@ -79,7 +79,7 @@ void redactedSummaryNeverContainsSecrets() {
 
 void rejectsUnsupportedSchemaAndUnsafePreferences() {
   auto config = validConfig();
-  config.schema_version = 2;
+  config.schema_version = 1;
   config.assistant.max_reply_chars = 0;
   config.preferences.volume_percent = 101;
 
@@ -92,7 +92,7 @@ void rejectsUnsupportedSchemaAndUnsafePreferences() {
 void rejectsUnsupportedAdaptersAndIncompleteProviderIds() {
   auto config = validConfig();
   config.stt.adapter = "custom-asr";
-  config.stt.app_key.clear();
+  config.stt.resource_id.clear();
   config.reply.adapter = "custom-reply";
   config.reply.model.clear();
   config.tts.adapter = "custom-tts";

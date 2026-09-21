@@ -14,8 +14,8 @@
 namespace qh_voice {
 
 constexpr std::size_t kMaximumDeviceConfigWireBytes = 8192;
-constexpr uint8_t kDeviceConfigWireVersion = 1;
-constexpr uint8_t kDeviceConfigWireFieldCount = 24;
+constexpr uint8_t kDeviceConfigWireVersion = 2;
+constexpr uint8_t kDeviceConfigWireFieldCount = 23;
 
 enum class ConfigWireError {
   kNone,
@@ -50,27 +50,26 @@ inline std::vector<uint8_t> encodeDeviceConfigWire(const DeviceConfig& config) {
   appendConfigField(output, 2, config.network.password);
   appendConfigField(output, 3, config.stt.adapter);
   appendConfigField(output, 4, config.stt.endpoint);
-  appendConfigField(output, 5, config.stt.app_key);
-  appendConfigField(output, 6, config.stt.credential);
-  appendConfigField(output, 7, config.stt.resource_id);
-  appendConfigField(output, 8, config.reply.adapter);
-  appendConfigField(output, 9, config.reply.endpoint);
-  appendConfigField(output, 10, config.reply.model);
-  appendConfigField(output, 11, config.reply.credential);
-  appendConfigField(output, 12, config.tts.adapter);
-  appendConfigField(output, 13, config.tts.endpoint);
-  appendConfigField(output, 14, config.tts.credential);
-  appendConfigField(output, 15, config.tts.resource_id);
-  appendConfigField(output, 16, config.tts.speaker);
-  appendConfigField(output, 17, config.assistant.language);
-  appendConfigField(output, 18, config.assistant.system_prompt);
-  appendConfigField(output, 19,
+  appendConfigField(output, 5, config.stt.api_key);
+  appendConfigField(output, 6, config.stt.resource_id);
+  appendConfigField(output, 7, config.reply.adapter);
+  appendConfigField(output, 8, config.reply.endpoint);
+  appendConfigField(output, 9, config.reply.model);
+  appendConfigField(output, 10, config.reply.credential);
+  appendConfigField(output, 11, config.tts.adapter);
+  appendConfigField(output, 12, config.tts.endpoint);
+  appendConfigField(output, 13, config.tts.credential);
+  appendConfigField(output, 14, config.tts.resource_id);
+  appendConfigField(output, 15, config.tts.speaker);
+  appendConfigField(output, 16, config.assistant.language);
+  appendConfigField(output, 17, config.assistant.system_prompt);
+  appendConfigField(output, 18,
                     std::to_string(config.assistant.max_reply_chars));
-  appendConfigField(output, 20, config.qh_sync.enabled ? "1" : "0");
-  appendConfigField(output, 21, config.qh_sync.endpoint);
-  appendConfigField(output, 22, config.qh_sync.device_id);
-  appendConfigField(output, 23, config.qh_sync.credential);
-  appendConfigField(output, 24,
+  appendConfigField(output, 19, config.qh_sync.enabled ? "1" : "0");
+  appendConfigField(output, 20, config.qh_sync.endpoint);
+  appendConfigField(output, 21, config.qh_sync.device_id);
+  appendConfigField(output, 22, config.qh_sync.credential);
+  appendConfigField(output, 23,
                     std::to_string(config.preferences.volume_percent));
   return output;
 }
@@ -134,21 +133,20 @@ inline ConfigWireDecodeResult decodeDeviceConfigWire(const uint8_t* input,
       case 2: config.network.password = value; break;
       case 3: config.stt.adapter = value; break;
       case 4: config.stt.endpoint = value; break;
-      case 5: config.stt.app_key = value; break;
-      case 6: config.stt.credential = value; break;
-      case 7: config.stt.resource_id = value; break;
-      case 8: config.reply.adapter = value; break;
-      case 9: config.reply.endpoint = value; break;
-      case 10: config.reply.model = value; break;
-      case 11: config.reply.credential = value; break;
-      case 12: config.tts.adapter = value; break;
-      case 13: config.tts.endpoint = value; break;
-      case 14: config.tts.credential = value; break;
-      case 15: config.tts.resource_id = value; break;
-      case 16: config.tts.speaker = value; break;
-      case 17: config.assistant.language = value; break;
-      case 18: config.assistant.system_prompt = value; break;
-      case 19: {
+      case 5: config.stt.api_key = value; break;
+      case 6: config.stt.resource_id = value; break;
+      case 7: config.reply.adapter = value; break;
+      case 8: config.reply.endpoint = value; break;
+      case 9: config.reply.model = value; break;
+      case 10: config.reply.credential = value; break;
+      case 11: config.tts.adapter = value; break;
+      case 12: config.tts.endpoint = value; break;
+      case 13: config.tts.credential = value; break;
+      case 14: config.tts.resource_id = value; break;
+      case 15: config.tts.speaker = value; break;
+      case 16: config.assistant.language = value; break;
+      case 17: config.assistant.system_prompt = value; break;
+      case 18: {
         uint32_t parsed = 0;
         if (!parseConfigUnsigned(value,
                                  std::numeric_limits<uint16_t>::max(), parsed)) {
@@ -157,7 +155,7 @@ inline ConfigWireDecodeResult decodeDeviceConfigWire(const uint8_t* input,
         config.assistant.max_reply_chars = static_cast<uint16_t>(parsed);
         break;
       }
-      case 20:
+      case 19:
         if (value == "1") {
           config.qh_sync.enabled = true;
         } else if (value == "0") {
@@ -166,10 +164,10 @@ inline ConfigWireDecodeResult decodeDeviceConfigWire(const uint8_t* input,
           return {ConfigWireError::kInvalidNumber, std::nullopt};
         }
         break;
-      case 21: config.qh_sync.endpoint = value; break;
-      case 22: config.qh_sync.device_id = value; break;
-      case 23: config.qh_sync.credential = value; break;
-      case 24: {
+      case 20: config.qh_sync.endpoint = value; break;
+      case 21: config.qh_sync.device_id = value; break;
+      case 22: config.qh_sync.credential = value; break;
+      case 23: {
         uint32_t parsed = 0;
         if (!parseConfigUnsigned(value,
                                  std::numeric_limits<uint8_t>::max(), parsed)) {

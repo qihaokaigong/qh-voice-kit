@@ -5,6 +5,8 @@ current protocol cores were based on these sources:
 
 - Doubao streaming ASR documentation:
   <https://www.volcengine.com/docs/6561/1354869?lang=zh>
+- Doubao ASR new-console `X-Api-Key` authentication example:
+  <https://www.volcengine.com/docs/6561/1631584?lang=zh>
 - Volcengine official `ai-app-lab` ASR client and binary protocol at commit
   `88c983d70a098110fc839f8cd05e29fa7715e6ce`:
   <https://github.com/volcengine/ai-app-lab>

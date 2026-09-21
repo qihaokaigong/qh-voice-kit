@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://qh.example/schemas/voice-kit/device-config-v1.json",
+  "$id": "https://qh.example/schemas/voice-kit/device-config-v2.json",
   "title": "QH Voice Kit device configuration",
   "type": "object",
   "additionalProperties": false,
@@ -16,7 +16,7 @@
   ],
   "properties": {
     "schemaVersion": {
-      "const": 1
+      "const": 2
     },
     "network": {
       "type": "object",
@@ -39,15 +39,13 @@
       "required": [
         "adapter",
         "endpoint",
-        "appKey",
-        "credential",
+        "apiKey",
         "resourceId"
       ],
       "properties": {
         "adapter": {"const": "doubao-asr-v1"},
         "endpoint": {"type": "string", "pattern": "^wss://"},
-        "appKey": {"type": "string", "minLength": 1},
-        "credential": {
+        "apiKey": {
           "type": "string",
           "minLength": 1,
           "writeOnly": true,

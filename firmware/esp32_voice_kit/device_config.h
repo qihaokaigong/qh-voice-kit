@@ -10,7 +10,7 @@
 
 namespace qh_voice {
 
-constexpr uint16_t kDeviceConfigSchemaVersion = 1;
+constexpr uint16_t kDeviceConfigSchemaVersion = 2;
 
 struct NetworkConfig {
   std::string ssid;
@@ -20,8 +20,7 @@ struct NetworkConfig {
 struct SttConfig {
   std::string adapter;
   std::string endpoint;
-  std::string app_key;
-  std::string credential;
+  std::string api_key;
   std::string resource_id;
 };
 
@@ -118,7 +117,7 @@ inline ConfigValidationResult validateDeviceConfig(const DeviceConfig& config) {
   if (config.network.password.empty()) {
     result.errors.push_back(ConfigError::kMissingWifiPassword);
   }
-  if (config.stt.credential.empty()) {
+  if (config.stt.api_key.empty()) {
     result.errors.push_back(ConfigError::kMissingSttCredential);
   }
   if (config.reply.credential.empty()) {
@@ -136,7 +135,7 @@ inline ConfigValidationResult validateDeviceConfig(const DeviceConfig& config) {
   if (config.tts.adapter != "doubao-tts-v1") {
     result.errors.push_back(ConfigError::kUnsupportedTtsAdapter);
   }
-  if (config.stt.app_key.empty() || config.stt.resource_id.empty()) {
+  if (config.stt.resource_id.empty()) {
     result.errors.push_back(ConfigError::kInvalidSttConfig);
   }
   if (config.reply.model.empty()) {

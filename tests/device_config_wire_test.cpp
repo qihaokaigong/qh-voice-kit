@@ -9,11 +9,11 @@ namespace {
 
 qh_voice::DeviceConfig validConfig() {
   return {
-      1,
+      2,
       {"studio-wifi", "wifi-secret"},
       {"doubao-asr-v1",
-       "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel", "app-key",
-       "asr-secret", "volc.bigasr.sauc.duration"},
+       "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel", "asr-api-key",
+       "volc.bigasr.sauc.duration"},
       {"openai-compatible-v1", "https://api.example.com/v1", "reply-model",
        "reply-secret"},
       {"doubao-tts-v1",
@@ -36,8 +36,7 @@ void roundTripsEveryField() {
   const auto& result = *decoded.config;
   assert(result.network.ssid == source.network.ssid);
   assert(result.network.password == source.network.password);
-  assert(result.stt.app_key == source.stt.app_key);
-  assert(result.stt.credential == source.stt.credential);
+  assert(result.stt.api_key == source.stt.api_key);
   assert(result.reply.model == source.reply.model);
   assert(result.reply.credential == source.reply.credential);
   assert(result.tts.speaker == source.tts.speaker);

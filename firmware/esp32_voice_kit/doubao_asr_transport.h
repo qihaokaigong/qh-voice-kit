@@ -38,8 +38,8 @@ class DoubaoAsrTransport {
     provider_code_ = 0;
     status_ = AsrTransportStatus::kConnecting;
     const auto request = buildDoubaoAsrTransportRequest(
-        config.endpoint, config.app_key, config.credential,
-        config.resource_id, std::move(request_id));
+        config.endpoint, config.api_key, config.resource_id,
+        std::move(request_id));
     extra_headers_.clear();
     for (const auto& header : request.headers) {
       extra_headers_ += header.name + ": " + header.value + "\r\n";

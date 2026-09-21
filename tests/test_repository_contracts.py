@@ -49,7 +49,7 @@ class RepositoryContractsTest(unittest.TestCase):
 
         paths = [
             ("network", "password"),
-            ("stt", "credential"),
+            ("stt", "apiKey"),
             ("reply", "credential"),
             ("tts", "credential"),
             ("qhSync", "credential"),

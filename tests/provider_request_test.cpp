@@ -17,18 +17,21 @@ const std::string* findHeader(const std::vector<HeaderValue>& headers,
 
 void buildsDoubaoAsrHeaders() {
   const auto request = qh_voice::buildDoubaoAsrTransportRequest(
-      "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel", "app-key",
-      "access-key", "volc.bigasr.sauc.duration", "request-id");
+      "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel", "api-key",
+      "volc.bigasr.sauc.duration", "request-id");
 
   assert(request.endpoint ==
          "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel");
-  assert(*findHeader(request.headers, "X-Api-App-Key") == "app-key");
-  assert(*findHeader(request.headers, "X-Api-Access-Key") == "access-key");
+  const auto* api_key = findHeader(request.headers, "X-Api-Key");
+  assert(api_key != nullptr);
+  assert(*api_key == "api-key");
+  assert(findHeader(request.headers, "X-Api-App-Key") == nullptr);
+  assert(findHeader(request.headers, "X-Api-Access-Key") == nullptr);
   assert(*findHeader(request.headers, "X-Api-Resource-Id") ==
          "volc.bigasr.sauc.duration");
   assert(*findHeader(request.headers, "X-Api-Connect-Id") == "request-id");
   assert(findHeader(request.headers, "X-Api-Request-Id") == nullptr);
-  assert(request.endpoint.find("access-key") == std::string::npos);
+  assert(request.endpoint.find("api-key") == std::string::npos);
 }
 
 void buildsOpenAiCompatibleReplyHeaders() {
