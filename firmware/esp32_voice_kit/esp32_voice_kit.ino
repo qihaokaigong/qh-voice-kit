@@ -326,7 +326,12 @@ void serviceTranscription() {
   if (asr_transport.status() == qh_voice::AsrTransportStatus::kProviderError ||
       asr_transport.status() == qh_voice::AsrTransportStatus::kProtocolError ||
       asr_transport.status() == qh_voice::AsrTransportStatus::kDisconnected) {
+    const auto diagnostic = asr_transport.failure();
     failRuntime("asr_failed");
+    Serial.printf("ASR_DIAGNOSTIC category=%s http=%d provider=%lu\n",
+                  qh_voice::asrFailureCategoryName(diagnostic.category),
+                  diagnostic.http_status,
+                  static_cast<unsigned long>(diagnostic.provider_code));
   }
 }
 

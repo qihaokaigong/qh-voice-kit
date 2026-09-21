@@ -8,6 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCES = [
+    "asr_failure_diagnostic_test.cpp",
     "button_debouncer_test.cpp",
     "config_transaction_test.cpp",
     "device_config_wire_test.cpp",

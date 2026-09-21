@@ -4,6 +4,7 @@
 
 #include <string>
 
+#include "asr_failure_diagnostic.h"
 #include "device_config.h"
 #include "doubao_asr_protocol.h"
 #include "esp32_tls_bundle.h"
@@ -36,6 +37,7 @@ class DoubaoAsrTransport {
 
     transcript_.clear();
     provider_code_ = 0;
+    failure_ = {};
     status_ = AsrTransportStatus::kConnecting;
     const auto request = buildDoubaoAsrTransportRequest(
         config.endpoint, config.api_key, config.resource_id,
@@ -87,19 +89,37 @@ class DoubaoAsrTransport {
   AsrTransportStatus status() const { return status_; }
   const std::string& transcript() const { return transcript_; }
   uint32_t providerCode() const { return provider_code_; }
+  AsrFailureDiagnostic failure() const { return failure_; }
 
  private:
   void handleEvent(WStype_t type, uint8_t* payload, std::size_t length) {
     if (type == WStype_CONNECTED) {
       const auto frame = buildDoubaoAsrFullClientFrame(metadata_);
-      status_ = socket_.sendBIN(frame.data(), frame.size())
-                    ? AsrTransportStatus::kReady
-                    : AsrTransportStatus::kDisconnected;
+      if (socket_.sendBIN(frame.data(), frame.size())) {
+        status_ = AsrTransportStatus::kReady;
+      } else {
+        failure_ = {AsrFailureCategory::kNetwork, 0, 0};
+        status_ = AsrTransportStatus::kDisconnected;
+      }
+      return;
+    }
+    if (type == WStype_ERROR) {
+      failure_ = {AsrFailureCategory::kNetwork, 0, 0};
+      status_ = AsrTransportStatus::kDisconnected;
       return;
     }
     if (type == WStype_DISCONNECTED) {
-      if (status_ != AsrTransportStatus::kComplete &&
-          status_ != AsrTransportStatus::kIdle) {
+      if (status_ == AsrTransportStatus::kProviderError ||
+          status_ == AsrTransportStatus::kProtocolError ||
+          status_ == AsrTransportStatus::kComplete ||
+          status_ == AsrTransportStatus::kIdle) {
+        return;
+      }
+      const std::string_view reason(
+          payload == nullptr ? "" : reinterpret_cast<const char*>(payload),
+          payload == nullptr ? 0 : length);
+      failure_ = classifyAsrDisconnect(reason);
+      if (status_ != AsrTransportStatus::kComplete) {
         status_ = AsrTransportStatus::kDisconnected;
       }
       return;
@@ -119,11 +139,13 @@ class DoubaoAsrTransport {
     }
     if (result.status == DoubaoAsrStatus::kProviderError) {
       provider_code_ = result.provider_code;
+      failure_ = {AsrFailureCategory::kProvider, 0, provider_code_};
       status_ = AsrTransportStatus::kProviderError;
       socket_.disconnect();
       return;
     }
     if (result.status == DoubaoAsrStatus::kProtocolError) {
+      failure_ = {AsrFailureCategory::kProtocol, 0, 0};
       status_ = AsrTransportStatus::kProtocolError;
       socket_.disconnect();
     }
@@ -135,6 +157,7 @@ class DoubaoAsrTransport {
   std::string extra_headers_;
   std::string transcript_;
   uint32_t provider_code_ = 0;
+  AsrFailureDiagnostic failure_;
 };
 
 }  // namespace qh_voice
