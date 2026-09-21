@@ -46,11 +46,11 @@ candidate and host-tested protocol cores:
   WebSockets 2.7.2;
 - the recorded N16R8 hardware profile.
 
-This is still a candidate development build. The display UI, durable QH sync
-outbox/retry path, deterministic layered health checks, Release generation, and
-real-device Provider/playback acceptance are not complete. There is therefore
-no `allowed` end-user Release yet. A successful compile is not a successful
-real conversation.
+This is still a candidate development build. Candidate Release packaging is
+available, but the display UI, durable QH sync outbox/retry path, deterministic
+layered health checks, and real-device Provider/playback acceptance are not
+complete. There is therefore no `allowed` end-user Release yet. A successful
+compile or candidate package is not a successful real conversation.
 
 Run all host contract tests with:
 
@@ -65,5 +65,20 @@ the first run:
 ```bash
 ./scripts/compile.sh
 ```
+
+Package the exact build output as a non-stable candidate for controlled
+hardware acceptance:
+
+```bash
+python3 scripts/candidate_release.py \
+  --build-root .build/esp32_voice_kit \
+  --output .build/releases/<release-id> \
+  --release-id <release-id>
+```
+
+The packager reads the compiler-produced `flash_args`, requires the exact N16R8
+artifact set and addresses, copies only those binaries, and records their sizes
+and SHA-256 values. It always writes `acceptance.status: candidate`; promotion
+requires separate real-device evidence.
 
 The exact first hardware profile remains the recorded ESP32-S3 N16R8 reference build. Do not infer compatibility from the chip family alone.
