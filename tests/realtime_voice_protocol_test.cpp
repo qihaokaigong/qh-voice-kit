@@ -106,6 +106,28 @@ void sanitizesProviderCodesBeforeSerialDiagnostics() {
          "provider_error");
 }
 
+void namesProtocolStagesWithoutContent() {
+  assert(std::string(qh_voice::realtimeEventDiagnosticName(
+             qh_voice::RealtimeEventType::kInputCommitted)) ==
+         "input_committed");
+  assert(std::string(qh_voice::realtimeEventDiagnosticName(
+             qh_voice::RealtimeEventType::kTranscriptCompleted)) ==
+         "transcript_completed");
+  assert(std::string(qh_voice::realtimeEventDiagnosticName(
+             qh_voice::RealtimeEventType::kOutputAudioDelta)) ==
+         "output_audio_delta");
+  assert(std::string(qh_voice::realtimeEventDiagnosticName(
+             qh_voice::RealtimeEventType::kUnknown)) == "none");
+  assert(qh_voice::rememberRealtimeEventType(
+             qh_voice::RealtimeEventType::kInputCommitted,
+             qh_voice::RealtimeEventType::kUnknown) ==
+         qh_voice::RealtimeEventType::kInputCommitted);
+  assert(qh_voice::rememberRealtimeEventType(
+             qh_voice::RealtimeEventType::kInputCommitted,
+             qh_voice::RealtimeEventType::kTranscriptStarted) ==
+         qh_voice::RealtimeEventType::kTranscriptStarted);
+}
+
 }  // namespace
 
 int main() {
@@ -115,5 +137,6 @@ int main() {
   parsesConversationEventsWithoutRawProviderPayload();
   rejectsMissingOrUnknownTypes();
   sanitizesProviderCodesBeforeSerialDiagnostics();
+  namesProtocolStagesWithoutContent();
   return 0;
 }

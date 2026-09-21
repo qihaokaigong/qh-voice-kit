@@ -431,6 +431,10 @@ void serviceProvider() {
   }
   if (transport_status == RealtimeTransportStatus::kDisconnected &&
       voice_turn.state() != VoiceTurnState::kError) {
+    Serial.printf("RUNTIME provider_disconnect=%s last_event=%s\n",
+                  realtime_transport.disconnectCode().c_str(),
+                  qh_voice::realtimeEventDiagnosticName(
+                      realtime_transport.lastEventType()));
     failRuntime("provider_disconnected");
     return;
   }

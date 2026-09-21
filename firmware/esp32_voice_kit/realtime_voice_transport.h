@@ -1,12 +1,11 @@
 #pragma once
 
-#include <WebSocketsClient.h>
-
 #include <deque>
 #include <string>
 #include <utility>
 
 #include "device_config.h"
+#include "diagnostic_websockets_client.h"
 #include "esp32_tls_bundle.h"
 #include "realtime_voice_protocol.h"
 #include "secure_endpoint.h"
@@ -38,6 +37,9 @@ class RealtimeVoiceTransport {
     close();
     events_.clear();
     provider_error_code_.clear();
+    disconnect_code_ = "none";
+    last_event_type_ = RealtimeEventType::kUnknown;
+    socket_.clearDisconnectHint();
     session_ = std::move(session);
     closing_ = false;
     status_ = RealtimeTransportStatus::kConnecting;
@@ -105,6 +107,8 @@ class RealtimeVoiceTransport {
   const std::string& providerErrorCode() const {
     return provider_error_code_;
   }
+  const std::string& disconnectCode() const { return disconnect_code_; }
+  RealtimeEventType lastEventType() const { return last_event_type_; }
 
  private:
   static constexpr std::size_t kMaximumQueuedEvents = 48;
@@ -137,20 +141,30 @@ class RealtimeVoiceTransport {
       return;
     }
     if (type == WStype_ERROR) {
-      if (!closing_) status_ = RealtimeTransportStatus::kDisconnected;
+      if (!closing_) {
+        disconnect_code_ = "websocket_error";
+        status_ = RealtimeTransportStatus::kDisconnected;
+      }
       return;
     }
     if (type == WStype_DISCONNECTED) {
       if (!closing_ && status_ != RealtimeTransportStatus::kProviderError &&
           status_ != RealtimeTransportStatus::kProtocolError) {
+        const std::string_view reason(
+            payload == nullptr ? "" : reinterpret_cast<const char*>(payload),
+            payload == nullptr ? 0 : length);
+        disconnect_code_ =
+            safeWebSocketDisconnectCode(socket_.disconnectHint(), reason);
         status_ = RealtimeTransportStatus::kDisconnected;
       }
+      socket_.clearDisconnectHint();
       return;
     }
     if (type != WStype_TEXT || payload == nullptr || length == 0) return;
 
     RealtimeEvent event = parseRealtimeServerEvent(std::string_view(
         reinterpret_cast<const char*>(payload), length));
+    last_event_type_ = rememberRealtimeEventType(last_event_type_, event.type);
     if (event.type == RealtimeEventType::kSessionCreated) {
       if (!sendText(buildRealtimeMuteCommit("initial-mute"))) {
         status_ = RealtimeTransportStatus::kDisconnected;
@@ -167,12 +181,14 @@ class RealtimeVoiceTransport {
     queueEvent(std::move(event));
   }
 
-  WebSocketsClient socket_;
+  DiagnosticWebSocketsClient socket_;
   RealtimeSessionConfig session_;
   RealtimeTransportStatus status_ = RealtimeTransportStatus::kIdle;
   std::string extra_headers_;
   std::string provider_error_code_;
+  std::string disconnect_code_ = "none";
   std::deque<RealtimeEvent> events_;
+  RealtimeEventType last_event_type_ = RealtimeEventType::kUnknown;
   bool closing_ = true;
 };
 

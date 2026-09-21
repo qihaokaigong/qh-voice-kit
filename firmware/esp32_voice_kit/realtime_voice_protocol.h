@@ -173,6 +173,51 @@ struct RealtimeEvent {
   std::string error_code;
 };
 
+inline const char* realtimeEventDiagnosticName(RealtimeEventType type) {
+  switch (type) {
+    case RealtimeEventType::kSessionCreated:
+      return "session_created";
+    case RealtimeEventType::kSessionClosed:
+      return "session_closed";
+    case RealtimeEventType::kInputCommitted:
+      return "input_committed";
+    case RealtimeEventType::kTranscriptStarted:
+      return "transcript_started";
+    case RealtimeEventType::kTranscriptDelta:
+      return "transcript_delta";
+    case RealtimeEventType::kTranscriptCompleted:
+      return "transcript_completed";
+    case RealtimeEventType::kTranscriptFailed:
+      return "transcript_failed";
+    case RealtimeEventType::kOutputTextDelta:
+      return "output_text_delta";
+    case RealtimeEventType::kOutputTextDone:
+      return "output_text_done";
+    case RealtimeEventType::kOutputAudioStarted:
+      return "output_audio_started";
+    case RealtimeEventType::kOutputAudioDelta:
+      return "output_audio_delta";
+    case RealtimeEventType::kOutputAudioDone:
+      return "output_audio_done";
+    case RealtimeEventType::kResponseDone:
+      return "response_done";
+    case RealtimeEventType::kResponseCanceled:
+      return "response_canceled";
+    case RealtimeEventType::kError:
+      return "error";
+    case RealtimeEventType::kProtocolError:
+      return "protocol_error";
+    case RealtimeEventType::kUnknown:
+      return "none";
+  }
+  return "none";
+}
+
+inline RealtimeEventType rememberRealtimeEventType(
+    RealtimeEventType previous, RealtimeEventType next) {
+  return next == RealtimeEventType::kUnknown ? previous : next;
+}
+
 inline std::string safeRealtimeErrorCode(std::string_view code) {
   if (code.empty() || code.size() > 48) return "provider_error";
   for (const unsigned char value : code) {

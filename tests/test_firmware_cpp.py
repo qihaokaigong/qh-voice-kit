@@ -26,6 +26,7 @@ SOURCES = [
     "realtime_voice_protocol_test.cpp",
     "secure_endpoint_test.cpp",
     "voice_turn_state_test.cpp",
+    "websocket_disconnect_diagnostic_test.cpp",
 ]
 
 
