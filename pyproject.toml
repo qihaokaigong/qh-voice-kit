@@ -1,0 +1,11 @@
+[project]
+name = "qh-voice-kit"
+version = "0.1.0"
+description = "Open ESP32-S3 firmware for the QH voice kit"
+requires-python = ">=3.11"
+
+[dependency-groups]
+dev = ["pytest>=8.4,<9"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

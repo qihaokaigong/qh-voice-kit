@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "profileId": "qh.voice-kit.breadboard.n16r8.v1",
+  "status": "candidate",
+  "chipFamily": "ESP32-S3",
+  "memory": {
+    "flashBytes": 16777216,
+    "psramMode": "opi"
+  },
+  "pins": {
+    "microphone": {
+      "sck": 4,
+      "ws": 5,
+      "sd": 6
+    },
+    "button": 8,
+    "display": {
+      "sck": 9,
+      "mosi": 10,
+      "reset": 11,
+      "dc": 12,
+      "cs": -1,
+      "driver": "ST7789",
+      "width": 240,
+      "height": 240
+    },
+    "speaker": {
+      "bclk": 16,
+      "lrc": 17,
+      "din": 18
+    }
+  },
+  "serial": {
+    "baud": 115200
+  },
+  "arduino": {
+    "coreVersion": "3.3.11",
+    "fqbn": "esp32:esp32:esp32s3:UploadSpeed=921600,USBMode=hwcdc,CDCOnBoot=default,MSCOnBoot=default,DFUOnBoot=default,UploadMode=default,CPUFreq=240,FlashMode=qio,FlashSize=16M,PartitionScheme=default,DebugLevel=none,PSRAM=opi,LoopCore=1,EventsCore=1,EraseFlash=none,JTAGAdapter=default,ZigbeeMode=default"
+  },
+  "evidence": {
+    "source": "77-esp32-voice@e05ff74",
+    "historicalSubsystemStatus": "individual microphone, display, button, and speaker paths were exercised in the recorded reference project",
+    "currentReleaseStatus": "the new direct-provider firmware has not completed a real-device acceptance run"
+  }
+}
