@@ -80,6 +80,13 @@ void parsesConversationEventsWithoutRawProviderPayload() {
   assert(event.type == qh_voice::RealtimeEventType::kError);
   assert(event.error_code == "quota_exceeded");
   assert(event.text.empty());
+
+  event = qh_voice::parseRealtimeServerEvent(
+      "{\"type\":\"error\",\"status_code\":45000001,"
+      "\"message\":\"sensitive provider detail\"}");
+  assert(event.type == qh_voice::RealtimeEventType::kError);
+  assert(event.error_code == "45000001");
+  assert(event.text.empty());
 }
 
 void rejectsMissingOrUnknownTypes() {
@@ -87,6 +94,16 @@ void rejectsMissingOrUnknownTypes() {
          qh_voice::RealtimeEventType::kProtocolError);
   assert(qh_voice::parseRealtimeServerEvent("{\"type\":\"future.event\"}")
              .type == qh_voice::RealtimeEventType::kUnknown);
+}
+
+void sanitizesProviderCodesBeforeSerialDiagnostics() {
+  assert(qh_voice::safeRealtimeErrorCode("45000001") == "45000001");
+  assert(qh_voice::safeRealtimeErrorCode("quota_exceeded") ==
+         "quota_exceeded");
+  assert(qh_voice::safeRealtimeErrorCode("secret key: value") ==
+         "provider_error");
+  assert(qh_voice::safeRealtimeErrorCode(std::string(49, 'a')) ==
+         "provider_error");
 }
 
 }  // namespace
@@ -97,5 +114,6 @@ int main() {
   decodesOutputAudioAndBuildsSecretHeader();
   parsesConversationEventsWithoutRawProviderPayload();
   rejectsMissingOrUnknownTypes();
+  sanitizesProviderCodesBeforeSerialDiagnostics();
   return 0;
 }

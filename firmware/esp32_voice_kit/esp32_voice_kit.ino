@@ -379,6 +379,9 @@ void serviceRealtimeEvents() {
         failRuntime("provider_response_failed");
         return;
       case qh_voice::RealtimeEventType::kError:
+        event.error_code = qh_voice::safeRealtimeErrorCode(event.error_code);
+        Serial.printf("RUNTIME provider_error_code=%s\n",
+                      event.error_code.c_str());
         failRuntime(providerErrorCode(event.error_code));
         return;
       case qh_voice::RealtimeEventType::kProtocolError:
@@ -416,7 +419,10 @@ void serviceProvider() {
 
   const auto transport_status = realtime_transport.status();
   if (transport_status == RealtimeTransportStatus::kProviderError) {
-    failRuntime(providerErrorCode(realtime_transport.providerErrorCode()));
+    const std::string error_code = qh_voice::safeRealtimeErrorCode(
+        realtime_transport.providerErrorCode());
+    Serial.printf("RUNTIME provider_error_code=%s\n", error_code.c_str());
+    failRuntime(providerErrorCode(error_code));
     return;
   }
   if (transport_status == RealtimeTransportStatus::kProtocolError) {

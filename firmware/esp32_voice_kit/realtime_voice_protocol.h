@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cctype>
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -172,6 +173,16 @@ struct RealtimeEvent {
   std::string error_code;
 };
 
+inline std::string safeRealtimeErrorCode(std::string_view code) {
+  if (code.empty() || code.size() > 48) return "provider_error";
+  for (const unsigned char value : code) {
+    if (!std::isalnum(value) && value != '_' && value != '-' && value != '.') {
+      return "provider_error";
+    }
+  }
+  return std::string(code);
+}
+
 inline RealtimeEventType realtimeEventType(std::string_view type) {
   if (type == "session.created") return RealtimeEventType::kSessionCreated;
   if (type == "session.closed") return RealtimeEventType::kSessionClosed;
@@ -269,7 +280,14 @@ inline RealtimeEvent parseRealtimeServerEvent(std::string_view json) {
       const std::size_t error = json.find(R"json("error")json");
       const auto code = findJsonString(
           json, "code", error == std::string_view::npos ? 0 : error);
-      event.error_code = code.value_or("provider_error");
+      if (code) {
+        event.error_code = *code;
+      } else if (const auto status_code =
+                     findJsonUnsignedInteger(json, "status_code")) {
+        event.error_code = std::to_string(*status_code);
+      } else {
+        event.error_code = "provider_error";
+      }
       break;
     }
     default:

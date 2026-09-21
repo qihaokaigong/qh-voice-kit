@@ -139,4 +139,31 @@ inline std::optional<std::string> findJsonString(
   return parseJsonString(json, cursor);
 }
 
+inline std::optional<uint32_t> findJsonUnsignedInteger(
+    std::string_view json, std::string_view key, std::size_t start = 0) {
+  const std::string needle = "\"" + std::string(key) + "\"";
+  std::size_t cursor = json.find(needle, start);
+  if (cursor == std::string_view::npos) return std::nullopt;
+  cursor = json.find(':', cursor + needle.size());
+  if (cursor == std::string_view::npos) return std::nullopt;
+  ++cursor;
+  while (cursor < json.size() &&
+         std::isspace(static_cast<unsigned char>(json[cursor]))) {
+    ++cursor;
+  }
+  if (cursor == json.size() ||
+      !std::isdigit(static_cast<unsigned char>(json[cursor]))) {
+    return std::nullopt;
+  }
+  uint32_t value = 0;
+  while (cursor < json.size() &&
+         std::isdigit(static_cast<unsigned char>(json[cursor]))) {
+    const uint32_t digit = static_cast<uint32_t>(json[cursor] - '0');
+    if (value > (UINT32_MAX - digit) / 10U) return std::nullopt;
+    value = value * 10U + digit;
+    ++cursor;
+  }
+  return value;
+}
+
 }  // namespace qh_voice
